@@ -8,10 +8,24 @@ const iconMap = readFileSync(new URL("../src/data/skill_icons.json", import.meta
 const skill = { code: "18770000", job: "Chanter" };
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-function setup(fetch) {
+function setup(fetchSkillIcon) {
   const logs = [];
-  const window = { javaBridge: { readResource: () => iconMap, logToDebug: (message) => logs.push(message) } };
-  vm.runInNewContext(source, { window, fetch, console: { debug() {} }, Blob, Uint8Array, atob, btoa, URL: { createObjectURL: () => "blob:icon" } });
+  const window = {
+    javaBridge: {
+      readResource: () => iconMap,
+      logToDebug: (message) => logs.push(message),
+      fetchSkillIcon,
+    },
+  };
+  vm.runInNewContext(source, {
+    window,
+    console: { debug() {} },
+    Blob,
+    Uint8Array,
+    atob,
+    btoa,
+    URL: { createObjectURL: () => "blob:icon" },
+  });
   return { icons: window.skillIcons, logs };
 }
 
@@ -25,11 +39,12 @@ test("Chanter 1877 uses the game-data passive icon rather than guessing 077", ()
 });
 
 for (const status of [404, 410]) {
-  test(`${status} skips direct retries across concurrent images and redraws`, async () => {
+  test(`${status} skips retries across concurrent images and redraws`, async () => {
     let requests = 0;
-    const { icons, logs } = setup(async () => { requests += 1; return { ok: false, status }; });
+    const { icons, logs } = setup(async () => { requests += 1; return null; });
     const images = Array.from({ length: 4 }, image);
     images.forEach((img) => icons.applyIconToImage(img, skill));
+    await tick();
     await tick();
     assert.equal(requests, 1);
     images.forEach((img) => assert.match(img.src, /^data:image\/svg/));
@@ -42,17 +57,17 @@ for (const status of [404, 410]) {
   });
 }
 
-test("CORS failure still tries a direct image, but repeated image errors are cached", async () => {
+test("a failed icon download never assigns the CDN url", async () => {
   let requests = 0;
-  const { icons, logs } = setup(async () => { requests += 1; throw new TypeError("Failed to fetch"); });
+  const { icons } = setup(async () => { requests += 1; throw new TypeError("Failed to fetch"); });
   const images = Array.from({ length: 4 }, image);
   images.forEach((img) => icons.applyIconToImage(img, skill));
   await tick();
-  images.forEach((img) => assert.match(img.src, /^https:/));
-  assert.equal(logs.length, 0);
-  images.forEach((img) => icons.handleImgError(img));
-  assert.equal(logs.length, 1);
-  assert.match(logs[0], /could not load/);
+  await tick();
+  images.forEach((img) => {
+    assert.match(img.src, /^data:image\/svg/);
+    assert.equal(String(img.src).startsWith("https:"), false);
+  });
   const redrawn = image();
   icons.applyIconToImage(redrawn, skill);
   await tick();
@@ -71,7 +86,8 @@ test("successful downloads are shared and an old response cannot replace a new s
   await tick();
   icons.applyIconToImage(first, { code: "" });
   const replacement = first.src;
-  complete({ ok: true, blob: async () => new Blob(["png"]) });
+  complete("iVBORw0KGgo=");
+  await tick();
   await tick();
   assert.equal(first.src, replacement);
   assert.equal(second.src, "blob:icon");

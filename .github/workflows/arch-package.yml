@@ -125,6 +125,7 @@ jobs:
           npm ci
           # The hotkeys helper first: tauri.linux.conf.json packs it next to
           # the meter (platform/linux/hotkeys.rs), without capabilities.
+          # Default features are the private build. Do not pass --features online.
           cargo build --release --manifest-path src-tauri/Cargo.toml --bin a2tools-hotkeys
           npx tauri build --bundles deb,rpm
       # The same two binaries for the Arch package (the makepkg job).

@@ -2058,12 +2058,9 @@ const createDetailsUI = ({
         entry.img.onload = () => { entry.ready = true; scheduleTimelineRedraw(); };
         return;
       }
-      // Use skillIcons blob cache (fetchAsBlob) if available, else fetch directly
       const fetchPromise = window.skillIcons?._fetchAsBlob
         ? window.skillIcons._fetchAsBlob(url)
-        : fetch(url, { mode: "cors", credentials: "omit" })
-            .then((r) => { if (!r.ok) throw new Error(r.status); return r.blob(); })
-            .then((blob) => URL.createObjectURL(blob));
+        : Promise.resolve(null);
       fetchPromise
         .then((blobUrl) => {
           if (!blobUrl) throw new Error("no blob");

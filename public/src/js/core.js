@@ -3055,22 +3055,18 @@ class DpsApp {
         window.javaBridge?.setBossLogsEnabled?.(isChecked);
       });
     }
-    // A2Tools users in the party see each other (party_presence.rs): on
-    // unless turned off.
+    // A2Tools users in the party see each other (party_presence.rs): off
+    // until set to "true".
     if (this.partyPresenceCheckbox) {
-      this.partyPresenceCheckbox.checked = this.safeGetSetting(this.storageKeys.partyPresence) !== "false";
+      this.partyPresenceCheckbox.checked = this.safeGetSetting(this.storageKeys.partyPresence) === "true";
       this.partyPresenceCheckbox.addEventListener("change", (event) => {
         this.safeSetSetting(this.storageKeys.partyPresence, event.target?.checked ? "true" : "false");
       });
     }
     // Field boss timers and Supply Requests, shared with a2tools.app
-    // (boss_report.rs shares_data): on unless turned off, here or, before
-    // 2.0.78, with either of the two switches this one replaced.
+    // (boss_report.rs shares_data): off until set to "true".
     if (this.shareDataCheckbox) {
-      const set = this.safeGetSetting(this.storageKeys.shareData);
-      this.shareDataCheckbox.checked = set != null && set !== ""
-        ? set !== "false"
-        : ["dpsMeter.shareBossTimers", "dpsMeter.shareSupplyRequests"].every((k) => this.safeGetSetting(k) !== "false");
+      this.shareDataCheckbox.checked = this.safeGetSetting(this.storageKeys.shareData) === "true";
       this.shareDataCheckbox.addEventListener("change", (event) => {
         this.safeSetSetting(this.storageKeys.shareData, event.target?.checked ? "true" : "false");
       });
@@ -3771,8 +3767,7 @@ class DpsApp {
     }
 
     if (url) {
-      const externalOnly = supportType === "paypal" || supportType === "afdian" || supportType === "kofi" || supportType === "patreon";
-      this.openExternalLink(url, { externalOnly });
+      this.openExternalLink(url);
     }
 
     if (copyValue) {
@@ -3782,15 +3777,11 @@ class DpsApp {
     }
   }
 
-  openExternalLink(url, { externalOnly = false } = {}) {
+  // The allowlisted open_url command is the only opener. The page does not
+  // load the address in its own window.
+  openExternalLink(url) {
     if (!url) return;
     window.javaBridge?.openBrowser?.(url);
-    if (externalOnly) return;
-    try {
-      window.open(url, "_blank", "noopener");
-    } catch {
-      // ignore
-    }
   }
 
   copySupportValue(value, message) {
@@ -7237,9 +7228,8 @@ class DpsApp {
   }
 
   // A one-time popup about showing A2Tools users in the party to each other,
-  // ticked: shown once to everyone, on a new install and after the update
-  // that brings it. Done keeps the tick's answer; ×, Escape or a click
-  // outside keep it on (it says so, and Settings changes it).
+  // unticked. Done keeps the tick's answer. ×, Escape or a click outside
+  // leave it off unless it was already turned on in Settings.
   maybeShowPartyPromo() {
     const promo = document.querySelector("#partyPromo");
     if (!promo) return false;
@@ -7249,7 +7239,7 @@ class DpsApp {
     const onKey = (event) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        answer(this.safeGetSetting(this.storageKeys.partyPresence) !== "false");
+        answer(this.safeGetSetting(this.storageKeys.partyPresence) === "true");
       }
     };
     const answer = (enabled) => {
@@ -7263,7 +7253,7 @@ class DpsApp {
       promo.setAttribute("aria-hidden", "true");
       document.removeEventListener("keydown", onKey, true);
     };
-    const kept = () => this.safeGetSetting(this.storageKeys.partyPresence) !== "false";
+    const kept = () => this.safeGetSetting(this.storageKeys.partyPresence) === "true";
     promo.querySelector(".partyPromoDone")?.addEventListener("click", () => answer(!!checkbox?.checked));
     promo.querySelector(".partyPromoClose")?.addEventListener("click", () => answer(kept()));
     promo.addEventListener("click", (event) => {

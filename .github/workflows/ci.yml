@@ -46,10 +46,12 @@ jobs:
         # The replay tests skip without A2_REPLAY_CAPTURE, which is a real packet
         # capture and not something to commit — it is a recording of five real
         # people playing. They run locally; everything else runs here.
-        run: cargo test --all-targets
+        # online is not the default. This job still compiles and tests it.
+        # The packaged build does not pass --features online.
+        run: cargo test --all-targets --features online
       - name: Build binaries
         working-directory: src-tauri
-        run: cargo build --bins
+        run: cargo build --bins --features online
 
   platform-boundary:
     name: OS code stays in src/platform
@@ -104,6 +106,11 @@ jobs:
             printf "ci" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
             cargo test --no-default-features --features desktop --lib secret -- --nocapture
           '
+      - name: Online code still compiles
+        working-directory: src-tauri
+        run: cargo check --all-targets --features online
+      - name: Private build links no upload stack
+        run: sh tools/check-offline-deps.sh
 
   parser-wasm:
     name: Parser compiles to wasm32

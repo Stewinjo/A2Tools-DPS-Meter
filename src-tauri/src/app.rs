@@ -837,7 +837,7 @@ async fn account_begin_link(
     // Open the browser straight onto the filled-in code. If it fails the player
     // still has the code and the URL in front of them.
     if crate::account::is_site_url(&grant.verification_uri_complete) {
-        open_url(grant.verification_uri_complete.clone());
+        open_allowed_url(&grant.verification_uri_complete);
     } else {
         tracing::warn!("Not opening the sign-in page: the server sent a link outside a2tools.app");
     }
@@ -1384,7 +1384,14 @@ async fn read_cached_icon(app: tauri::AppHandle, key: String) -> Result<Option<S
     }
     crate::blocking::ICONS.run(move || {
         let path = app.state::<AppState>().app_data_dir.join("icon_cache").join(&key);
-        std::fs::read_to_string(&path).ok()
+        let Ok(data) = std::fs::read_to_string(&path) else { return None };
+        let valid = crate::icons::decode_base64(&data)
+            .is_some_and(|bytes| crate::icons::image_bytes_ok(&bytes));
+        if !valid {
+            let _ = std::fs::remove_file(&path);
+            return None;
+        }
+        Some(data)
     }).await
 }
 
@@ -1470,20 +1477,45 @@ fn log_from_ui(message: String) {
 }
 
 /// Keep a downloaded skill icon (base64) for next time. Off the main thread;
-/// see `read_cached_icon`. An icon already kept is not written again.
+/// see `read_cached_icon`. An icon already kept is not written again. The
+/// bytes have to be an image; anything else is refused and not stored.
 #[tauri::command]
 async fn write_cached_icon(app: tauri::AppHandle, key: String, data: String) -> Result<(), String> {
     if !crate::history::fight_history::is_plain_name(&key) {
-        return Ok(());
+        return Err("invalid icon name".into());
+    }
+    let bytes = crate::icons::decode_base64(&data).ok_or("invalid icon")?;
+    if !crate::icons::image_bytes_ok(&bytes) {
+        return Err("not an image".into());
     }
     crate::blocking::ICONS.run(move || {
         let cache_dir = app.state::<AppState>().app_data_dir.join("icon_cache");
         let path = cache_dir.join(&key);
-        if !path.exists() {
+        let already_good = std::fs::read_to_string(&path).ok().is_some_and(|existing| {
+            crate::icons::decode_base64(&existing).is_some_and(|cached| crate::icons::image_bytes_ok(&cached))
+        });
+        if !already_good {
             let _ = std::fs::create_dir_all(&cache_dir);
             let _ = std::fs::write(&path, &data);
         }
     }).await
+}
+
+/// Download one skill or buff icon from the game-data CDN and cache it.
+/// The page cannot fetch that host itself; this command is the only path.
+#[tauri::command]
+async fn fetch_skill_icon(app: tauri::AppHandle, url: String) -> Result<String, String> {
+    if !crate::icons::icon_url_allowed(&url) {
+        return Err("icon url not allowed".into());
+    }
+    let fetch_url = url.clone();
+    let bytes = crate::blocking::ICONS
+        .run(move || crate::icons::download_icon(&fetch_url))
+        .await??;
+    let encoded = crate::share::base64(&bytes);
+    let key = crate::icons::cache_key(&url).ok_or("icon url not allowed")?.to_string();
+    write_cached_icon(app, key, encoded.clone()).await?;
+    Ok(encoded)
 }
 
 
@@ -1897,9 +1929,30 @@ fn build_features() -> serde_json::Value {
     serde_json::json!({ "online": cfg!(feature = "online"), "devSupporter": dev_supporter })
 }
 
+fn open_allowed_url(url: &str) {
+    if !crate::open_urls::allowed_browser_url(url) {
+        tracing::warn!("Not opening a link outside the allowlist");
+        return;
+    }
+    platform::shell::open_url(url);
+}
+
 #[tauri::command]
-fn open_url(url: String) {
-    platform::shell::open_url(&url);
+fn open_url(app: tauri::AppHandle, url: String) {
+    if crate::open_urls::allowed_browser_url(&url) {
+        open_allowed_url(&url);
+        return;
+    }
+    let Some(state) = app.try_state::<AppState>() else {
+        tracing::warn!("Not opening a link outside the allowlist");
+        return;
+    };
+    let preview = state.app_data_dir.join("share-preview");
+    if crate::open_urls::is_share_preview_dir(&url, &preview) {
+        platform::shell::open_url(&url);
+        return;
+    }
+    tracing::warn!("Not opening a link outside the allowlist");
 }
 
 #[tauri::command]
@@ -4160,6 +4213,7 @@ pub fn run() {
             open_url,
             read_cached_icon,
             write_cached_icon,
+            fetch_skill_icon,
             log_from_ui,
             suspend_capture,
             overlay_lock_supported,

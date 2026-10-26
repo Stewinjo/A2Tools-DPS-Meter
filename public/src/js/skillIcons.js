@@ -179,11 +179,8 @@
   // In-memory blob URL cache: CDN url → blob URL (instant, no decode cost)
   const blobCache = new Map();    // url → blobUrl
   const blobPending = new Map();  // url → Promise<blobUrl|null>
-  // URLs whose fetch failed. The icon CDN only sends CORS headers to
-  // NCSoft's own sites (aion2.plaync.com, www.plaync.com), so a fetch from the
-  // meter's webview or from a2tools.app is refused, while a plain <img> load
-  // of the same URL needs no CORS and works. Those go straight to <img>, and
-  // are not fetched again on every redraw.
+  // URLs the icon command refused or could not download. Not retried on
+  // every redraw. The page never loads the CDN URL itself.
   const fetchFailed = new Set();
   const unavailable = new Set();
   // A caller may give its own list (`skill.candidates`), as buff icons do.
@@ -231,6 +228,13 @@
     return match ? match[1] : null;
   };
 
+  const bytesToBlob = (b64) => {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: "image/png" });
+  };
+
   const fetchAsBlob = (url) => {
     if (blobCache.has(url)) return Promise.resolve(blobCache.get(url));
     if (blobPending.has(url)) return blobPending.get(url);
@@ -251,41 +255,24 @@
           const b64 = bridge.readCachedIconAsync
             ? await bridge.readCachedIconAsync(cacheKey)
             : bridge.readCachedIcon(cacheKey);
-          if (b64) {
-            const binary = atob(b64);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-            return new Blob([bytes], { type: "image/png" });
-          }
+          if (b64) return bytesToBlob(b64);
         }
         return null;
       })
-      .then((diskBlob) => {
+      .then(async (diskBlob) => {
         if (diskBlob) return diskBlob;
-        // Fetch from CDN and persist to disk cache
-        return fetch(url, { mode: "cors", credentials: "omit" })
-          .then((r) => {
-            if (!r.ok) {
-              const error = new Error(r.status);
-              error.status = r.status;
-              throw error;
-            }
-            return r.blob();
-          })
-          .then((blob) => {
-            // Write to disk cache in background
-            if (cacheKey && bridge?.writeCachedIcon) {
-              blob.arrayBuffer().then((buf) => {
-                const bytes = new Uint8Array(buf);
-                let b64 = "";
-                for (let i = 0; i < bytes.length; i += 8192) {
-                  b64 += String.fromCharCode(...bytes.subarray(i, i + 8192));
-                }
-                bridge.writeCachedIcon(cacheKey, btoa(b64));
-              }).catch(() => {});
-            }
-            return blob;
-          });
+        // Rust checks the host, refuses redirects, and keeps image bytes only.
+        if (!bridge?.fetchSkillIcon) {
+          const error = new Error("no icon fetch");
+          throw error;
+        }
+        const b64 = await bridge.fetchSkillIcon(url);
+        if (!b64) {
+          const error = new Error("not an image");
+          error.status = 404;
+          throw error;
+        }
+        return bytesToBlob(b64);
       })
       .then((blob) => {
         const blobUrl = URL.createObjectURL(blob);
@@ -298,7 +285,7 @@
           unavailable.add(url);
           logFailure(`not found (${err.status}); using fallback: ${url}`);
         } else {
-          console.debug(`[A2Tools] Skill icon: cache download failed (${err?.message || err}); trying direct image: ${url}`);
+          console.debug(`[A2Tools] Skill icon: download failed (${err?.message || err}); using fallback: ${url}`);
         }
         return null;
       })
@@ -356,12 +343,8 @@
       if (imgEl.dataset.iconUrl !== primaryUrl) return;
       if (blobUrl) {
         imgEl.src = blobUrl;
-      } else if (unavailable.has(primaryUrl)) {
-        handleImgError(imgEl);
       } else {
-        // The fetch was refused (see fetchFailed): load the image directly.
-        // If that fails too, its error handler moves on to the next candidate.
-        imgEl.src = primaryUrl;
+        handleImgError(imgEl);
       }
     });
   };
@@ -407,6 +390,18 @@
       return;
     }
 
+    if (nextUrl.startsWith("http")) {
+      imgEl.src = WAND_ICON;
+      fetchAsBlob(nextUrl).then((blobUrl) => {
+        if (blobUrl) {
+          imgEl.classList.remove("isPlaceholder");
+          imgEl.src = blobUrl;
+        } else {
+          handleImgError(imgEl);
+        }
+      });
+      return;
+    }
     imgEl.classList.remove("isPlaceholder");
     imgEl.src = nextUrl;
   };

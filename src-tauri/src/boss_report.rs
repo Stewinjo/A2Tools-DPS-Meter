@@ -2,8 +2,8 @@
 //! a2tools.app, which checks it, combines it with other players' and
 //! publishes each server's timers for everyone's Event Timers.
 //!
-//! On by default, with the Supply Requests: Settings' "Sync useful data to
-//! A2Tools" (`shares_data`, "false" turns it off). What is sent: the server,
+//! Off until Settings' "Sync useful data to A2Tools" is set to "true"
+//! (`shares_data`). What is sent when it is on: the server,
 //! the map, and each field boss on it: up (since when) or dead (back when).
 //! Nothing about the player; the site counts reporters by a hash of their
 //! address that changes daily, and keeps no address.
@@ -46,19 +46,14 @@ use crate::capture::boss_map::BossMap;
 use crate::combat::data_storage::{BossEvent, BossEventKind, BossHp};
 
 /// Settings' "Sync useful data to A2Tools": field boss timers and Supply
-/// Requests, on unless turned off.
+/// Requests. Off until set to "true". The older `shareBossTimers` and
+/// `shareSupplyRequests` keys do not turn it on.
 pub const SHARE_DATA_KEY: &str = "dpsMeter.shareData";
-/// The two switches it replaced (2.0.78): either turned off keeps it off,
-/// until the player sets the new one.
-const OLD_KEYS: [&str; 2] = ["dpsMeter.shareBossTimers", "dpsMeter.shareSupplyRequests"];
 
 /// Whether the meter shares field boss timers and Supply Requests with
 /// a2tools.app, `get` reading a setting.
 pub fn shares_data(get: impl Fn(&str) -> Option<String>) -> bool {
-    match get(SHARE_DATA_KEY).as_deref() {
-        Some(v) => v != "false",
-        None => OLD_KEYS.iter().all(|k| get(k).as_deref() != Some("false")),
-    }
+    get(SHARE_DATA_KEY).as_deref() == Some("true")
 }
 
 fn sharing(state: &AppState) -> bool {
@@ -447,18 +442,18 @@ async fn send_artifacts(state: &AppState, seq: &mut u64, sent: &mut HashMap<u16,
 #[cfg(test)]
 mod tests {
     #[test]
-    fn sharing_is_on_unless_turned_off_here_or_before() {
+    fn sharing_is_off_until_turned_on() {
         use std::collections::HashMap;
         let with = |pairs: &[(&str, &str)]| {
             let m: HashMap<String, String> = pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
             super::shares_data(move |k| m.get(k).cloned())
         };
-        assert!(with(&[]), "on by default");
-        assert!(with(&[("dpsMeter.shareSupplyRequests", "true")]));
-        assert!(!with(&[("dpsMeter.shareBossTimers", "false")]), "boss timers turned off before: off");
-        assert!(!with(&[("dpsMeter.shareSupplyRequests", "false")]), "Supply Requests turned off before: off");
+        assert!(!with(&[]), "off by default");
+        assert!(!with(&[("dpsMeter.shareSupplyRequests", "true")]), "the old switch does not turn it on");
+        assert!(!with(&[("dpsMeter.shareBossTimers", "false")]));
         assert!(with(&[("dpsMeter.shareBossTimers", "false"), ("dpsMeter.shareData", "true")]), "the new switch decides once set");
         assert!(!with(&[("dpsMeter.shareData", "false")]));
+        assert!(with(&[("dpsMeter.shareData", "true")]));
     }
 
     use super::*;

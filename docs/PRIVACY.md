@@ -4,41 +4,45 @@ This document is written to be checkable. Everything in the "today" section can
 be verified against the source in this repository, and the evidence for the
 claims about packet captures is a test you can run yourself.
 
-Status: **the meter uploads a fight when you press Upload on it, or, if you
-turned on automatic uploads, when a boss fight ends.** Nothing about your fights
-is sent at any other time. This document says what the meter
-sends, what it keeps, and what an upload contains.
+Status: **the build this fork ships sends nothing it collected.** `npm run tauri build`
+and `npm run build:offline` are the same private build. Cargo's default features
+are `desktop` without `online`, so the account client (`reqwest`), the Discord
+client, and the updater are not in the binary. `tools/check-offline-deps.sh`
+fails CI if they show up.
 
----
+## The private build
 
-## What the meter sends
+**Skill and buff images.** The one download. The meter requests a single file
+under `https://assets.playnccdn.com/static-aion2-gamedata/resources/`. It does
+not follow a redirect. It stores the body in `icon_cache/` only when the bytes
+are a PNG, JPEG, GIF, or WebP and at most 1 MiB (`src-tauri/src/icons.rs`).
+The window's content security policy does not list that host on `img-src` or
+`connect-src`, so the page cannot fetch it itself.
 
-**A version check.** On startup, `checkRelease.js` fetches
-`https://a2tools.app/latest-v2.json` and compares the version to the running
-build. It sends no identifiers, no telemetry, and no combat data. If an update is
-available and you accept it, the MSI is downloaded from `cdn.a2tools.app`.
+**Links you click.** Discord, GitHub, Ko-fi, and the other support links open
+in your browser. The host has to be on `BROWSER_HOSTS` in
+`src-tauri/src/open_urls.rs`, the scheme has to be https, and the URL cannot
+carry a username or a port. `file:` and any other scheme are refused. The
+upload preview may open the `share-preview` folder on this computer. That is
+a local directory, not an upload, and a file inside it is not opened.
 
-**The supporter list.** Downloaded from the CDN every few hours and matched on
-your machine (see below). Nothing about your party is sent.
+Nothing else leaves. No version check, no supporter roster, no plugin
+download, no Npcap installer, no fight upload, no boss-timer or party-presence
+report, no Discord activity, no stream overlay. On Windows, install Npcap
+yourself.
 
-**Your account, if you connect one.** Signing in under *Settings → A2 Tools
-Account* opens a2tools.app in your browser to approve the meter, which then
-holds a token (encrypted with Windows DPAPI in `credentials.dat`). The meter
-uses it to ask who you are, and to upload. Without an account it makes none of
-these calls.
+`npm install` and the Rust build still download compilers and libraries. That
+is the build, not the running meter.
 
-**A fight, when you upload it.** The cloud button on a fight in Battle History
-sends that one fight. What exactly is described under "What an upload
-contains".
+## `npm run build:online`
 
-**Every boss fight, if you turn that on.** *Settings → A2 Tools Account →
-Upload boss fights automatically* is **off unless you turn it on**. With it on
-and an account connected, each boss fight is uploaded once it has ended (never
-while it is still being fought), with the visibility you chose on a2tools.app.
-Training dummies are never uploaded. Turning it off stops it immediately; it
-does not remove logs already uploaded, which you manage from your account.
-
-Nothing is transmitted when you fight, log in, or close the app.
+Not a release build. It compiles the upstream `online` feature as well. Even
+then, field boss timers, Supply Requests, and party presence are **off until
+you set them to `"true"`** (`dpsMeter.shareData`, `dpsMeter.partyPresence`).
+Fight upload stays off until you turn it on. A version check, the supporter
+roster, and the plugin catalog run only in this build. The rest of this
+document describes what an upload contains when you use that build and choose
+to upload.
 
 ## What it captures locally
 
@@ -118,6 +122,9 @@ them by format, not merely by policy.
 ---
 
 ## What an upload contains
+
+This section is `npm run build:online` only. The private build has no upload
+command.
 
 Pressing Upload sends two things to a2tools.app: the fight's Evidence Slice, and
 the names to show on the log. **It sends no numbers.** The service runs this
@@ -211,8 +218,9 @@ is for the meter to ask a server "is this player a supporter?", and it would mea
 sending us a list of who you play with, every fight, in exchange for a colour.
 
 So it works the other way round: a small file listing supporters is published to
-the CDN, your meter downloads it every few hours, and the matching happens
-locally. Nothing about your party is transmitted, and it works offline.
+the CDN, and an online build downloads it every few hours and matches it
+locally. Nothing about your party is transmitted. The private build does not
+download the file. A local `patrons-local.bin` still works, in either build.
 
 The entries in that file are hashed. That is anti-scraping, not secrecy — the
 salt travels with the file, so anyone can test a name they already have. What it

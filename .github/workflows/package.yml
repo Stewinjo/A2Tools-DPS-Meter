@@ -11,6 +11,9 @@ name: Packages
 #
 # Nothing here publishes the files. Arch, Bazzite, and the install checks stay
 # in arch-package.yml.
+#
+# Default Cargo features are the private build (desktop, not online).
+# Do not pass --features online.
 on:
   push:
     tags: ["v*"]

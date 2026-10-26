@@ -21,7 +21,6 @@
     })
     .catch(() => window.a2Build);
   const { listen } = window.__TAURI__.event;
-  const { open: shellOpen } = window.__TAURI__.opener;
 
   // The backend enables compositor resizing on GNOME and KDE.
   const isLinux = document.documentElement.classList.contains("linux");
@@ -346,7 +345,7 @@
   listen("npcap-missing", () => {
     const msg = "Npcap is required for packet capture but is not installed.\n\nWould you like to download it now?";
     if (confirm(msg)) {
-      shellOpen("https://npcap.com/#download");
+      invoke("open_url", { url: "https://npcap.com/#download" }).catch(() => {});
     }
   });
 
@@ -1021,6 +1020,10 @@
       if (!window._iconCache) window._iconCache = {};
       window._iconCache[key] = data;
       invoke("write_cached_icon", { key, data }).catch(() => {});
+    },
+    // Base64 image bytes, or null. Rust allowlists the URL and the body.
+    fetchSkillIcon(url) {
+      return invoke("fetch_skill_icon", { url }).catch(() => null);
     },
 
     // --- Fetch ---

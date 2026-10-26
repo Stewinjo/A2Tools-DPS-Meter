@@ -101,16 +101,9 @@ npm run tauri build
 
 That produces a Linux x86_64 binary. The same container is the Linux builder on a Windows, macOS, or Linux machine. It cannot produce the Windows MSI: that build needs the Windows SDK and WiX, so GitHub Actions builds it on `windows-latest` (`.github/workflows/package.yml`, on a version tag or by hand). macOS is not a target.
 
-### Building a private (offline) copy
+### Private build
 
-For anyone who wants a meter that talks to nothing but the game: build it yourself without its online features.
-
-```bash
-npm install
-npm run build:offline
-```
-
-That runs `tauri build -- --no-default-features --features desktop`, which leaves out the Cargo feature `online`. The code below is not switched off in this build, it is not in it: the network client (`reqwest`) and the Discord client are not linked at all, which `cargo tree --no-default-features --features desktop` shows.
+`npm run tauri build` is the private build. `npm run build:offline` is the same command with the feature flags written out: Cargo's default is `desktop` without `online`. The account client (`reqwest`), the Discord client, and the updater are not linked. `tools/check-offline-deps.sh` checks that.
 
 Left out:
 
@@ -120,11 +113,17 @@ Left out:
 - Send Logs to Dev
 - Discord activity ("what I'm playing")
 - the stream overlay for OBS (it serves the meter on your network)
+- boss-timer, supply, and party-presence reports
 - downloading Npcap's installer: install [Npcap](https://npcap.com/#download) yourself first
 
-Settings and History hide what is not there. Everything else works the same, offline: capture, the meter, Details, History, buffs, screenshots, the upload preview (it writes what an upload would contain, to disk only).
+Settings and History hide what is not there. Capture, the meter, Details, History, buffs, screenshots, and the upload preview still work. The preview writes what an upload would contain, to disk only.
 
-Two things still leave the computer, and only these: skill and buff icons, loaded from the game's own CDN (`assets.playnccdn.com`; the window's content security policy allows nothing else), and links you click yourself (Discord, Support), which open in your browser. `npm install` and the Rust build fetch their packages as usual. Run it without building with `npm run dev:offline`.
+What can still cross the network, and only this:
+
+- skill and buff icons, one file at a time from `https://assets.playnccdn.com/static-aion2-gamedata/resources/`. The app does not follow a redirect, and it keeps the response only when the bytes are a PNG, JPEG, GIF, or WebP. The window cannot fetch or display that host itself.
+- links you click (Discord, GitHub, Ko-fi, and the other support links), opened in your browser when the address is https on that list.
+
+`npm run build:online` compiles the upstream online features. It is not the release build. In that build, sharing boss timers and party presence is off until you turn each one on. `npm install` and the Rust build still download their own packages. Run the private build without packaging it with `npm run dev:offline`.
 
 ## FAQ
 
