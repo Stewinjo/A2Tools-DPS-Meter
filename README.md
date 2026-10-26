@@ -88,6 +88,19 @@ The MSI installer will be at `src-tauri/target/release/bundle/msi/`.
 npm run tauri dev
 ```
 
+### Dev container
+
+Open this folder in a [dev container](https://containers.dev/) (VS Code or Cursor: “Reopen in Container”). The image is Ubuntu 22.04 with Node, Rust, and the WebKitGTK libraries the Linux build needs. The first open installs npm packages and the pre-commit hooks, which run the frontend tests and the platform-boundary check on every commit.
+
+Inside the container:
+
+```bash
+npm run tauri dev
+npm run tauri build
+```
+
+That produces a Linux x86_64 binary. The same container is the Linux builder on a Windows, macOS, or Linux machine. It cannot produce the Windows MSI: that build needs the Windows SDK and WiX, so GitHub Actions builds it on `windows-latest` (`.github/workflows/package.yml`, on a version tag or by hand). macOS is not a target.
+
 ### Building a private (offline) copy
 
 For anyone who wants a meter that talks to nothing but the game: build it yourself without its online features.

@@ -1,0 +1,126 @@
+name: Packages
+
+# Installers, not the per-commit test suite. A version tag or a manual run
+# builds a Linux .deb and .rpm on Ubuntu 22.04 (older glibc, so the binary
+# runs on 22.04 and newer) and a Windows MSI. The dev container can build the
+# Linux app; it cannot build the MSI.
+#
+# The .rpm is repacked so cap_net_raw is a file capability (%caps). Tauri's
+# own rpm only grants that from a %post script, which rpm-ostree cannot run.
+# See packaging/linux/a2-tools-dps-meter.spec and arch-package.yml.
+#
+# Nothing here publishes the files. Arch, Bazzite, and the install checks stay
+# in arch-package.yml.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    name: Linux deb and rpm
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Rust channel from rust-toolchain.toml
+        id: rust-toolchain-file
+        shell: bash
+        run: echo "channel=$(sh tools/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust-toolchain-file.outputs.channel }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: package-linux
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+      - name: Build dependencies
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev rpm cpio mold
+          version: 1
+      # GCC 11 (Ubuntu 22.04) has no -fuse-ld=mold; -B points it at mold's ld.
+      - name: Link with mold
+        run: |
+          test -x /usr/libexec/mold/ld
+          echo "RUSTFLAGS=-C link-arg=-B/usr/libexec/mold" >> "$GITHUB_ENV"
+      - name: Frontend data
+        run: |
+          mkdir -p public/i18n public/data public/src/data
+          cp -r src/data/i18n/* public/i18n/
+          cp src/data/skill_icons.json src/data/dot_skill_ids.json public/data/
+          cp src/data/skill_icons.json src/data/dot_skill_ids.json public/src/data/
+      - name: Build
+        run: |
+          npm ci
+          cargo build --release --manifest-path src-tauri/Cargo.toml --bin a2tools-hotkeys
+          npx tauri build --bundles deb,rpm
+      - name: Rebuild the .rpm
+        run: |
+          version=$(grep -m1 '^version' src-tauri/Cargo.toml | cut -d'"' -f2)
+          mkdir -p rpmpayload
+          (cd rpmpayload && rpm2cpio ../src-tauri/target/release/bundle/rpm/*.rpm | cpio -idm --quiet)
+          (
+            cd rpmpayload
+            find "./usr/lib/A2Tools DPS Meter" -type d | sed 's|^\.||; s|.*|%dir "&"|'
+            find . \( -type f -o -type l \) | sed 's|^\.||' | while IFS= read -r f; do
+              if [ "$f" = /usr/bin/a2tools-dps-meter ]; then
+                printf '%%caps(cap_net_raw=ep) "%s"\n' "$f"
+              else
+                printf '"%s"\n' "$f"
+              fi
+            done
+          ) > rpm-files.txt
+          rpmbuild -bb packaging/linux/a2-tools-dps-meter.spec \
+            --define "_topdir $PWD/rpmbuild" \
+            --define "pkgversion $version" \
+            --define "payload $PWD/rpmpayload" \
+            --define "filelist $PWD/rpm-files.txt"
+      - name: Name the packages
+        run: |
+          version=$(grep -m1 '^version' src-tauri/Cargo.toml | cut -d'"' -f2)
+          mkdir -p out
+          cp src-tauri/target/release/bundle/deb/*.deb "out/a2tools-dps-meter_${version}_amd64.deb"
+          cp rpmbuild/RPMS/x86_64/*.rpm "out/a2tools-dps-meter-${version}-1.x86_64.rpm"
+          ls -la out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-packages
+          path: out/*
+          if-no-files-found: error
+
+  windows:
+    name: Windows MSI
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Rust channel from rust-toolchain.toml
+        id: rust-toolchain-file
+        shell: bash
+        run: echo "channel=$(sh tools/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust-toolchain-file.outputs.channel }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+      - name: Build
+        run: |
+          npm ci
+          npm run tauri build
+          npm run rename-msi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-msi
+          path: src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error

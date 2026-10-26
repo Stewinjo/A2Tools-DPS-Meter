@@ -1,0 +1,17 @@
+{
+  "name": "A2Tools DPS Meter",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "vscode",
+  "forwardPorts": [1420],
+  "postCreateCommand": "npm ci && pre-commit install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer"
+      ]
+    }
+  }
+}

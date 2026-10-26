@@ -29,7 +29,13 @@ jobs:
       shards: ${{ steps.shards.outputs.list }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Rust channel from rust-toolchain.toml
+        id: rust-toolchain-file
+        shell: bash
+        run: echo "channel=$(sh tools/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust-toolchain-file.outputs.channel }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: tools/slice-v3
