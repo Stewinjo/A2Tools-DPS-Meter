@@ -99,7 +99,7 @@ npm run tauri dev
 npm run tauri build
 ```
 
-That produces a Linux x86_64 binary. The same container is the Linux builder on a Windows, macOS, or Linux machine. It cannot produce the Windows MSI: that build needs the Windows SDK and WiX, so GitHub Actions builds it on `windows-latest` (`.github/workflows/package.yml`, on a version tag or by hand). macOS is not a target.
+That produces a Linux x86_64 binary. The same container is the Linux builder on a Windows, macOS, or Linux machine. It cannot produce the Windows MSI: that build needs the Windows SDK and WiX, so GitHub Actions builds it on `windows-latest` (`.github/workflows/package.yml`, on a version tag or by hand). Linux packages stay in `.github/workflows/arch-package.yml`. macOS is not a target.
 
 ### Private build
 

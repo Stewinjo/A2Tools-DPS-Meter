@@ -9,13 +9,18 @@ on:
   # By hand, for a branch: gh workflow run ci.yml --ref <branch>
   workflow_dispatch:
 
+# One CI run per ref. A new push cancels the previous run for that PR or branch.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   frontend:
     name: Frontend build and tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -46,16 +51,12 @@ jobs:
         # The replay tests skip without A2_REPLAY_CAPTURE, which is a real packet
         # capture and not something to commit — it is a recording of five real
         # people playing. They run locally; everything else runs here.
-        # online is not the default. This job still compiles and tests it.
-        # The packaged build does not pass --features online.
-        run: cargo test --all-targets --features online
-      - name: Build binaries
-        working-directory: src-tauri
-        run: cargo build --bins --features online
+        # Private build on Windows (win32). Online is compiled on the Linux job.
+        run: cargo test --all-targets --no-default-features --features desktop
 
   platform-boundary:
     name: OS code stays in src/platform
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v7
       # Windows and (later) Linux builds share one codebase. What keeps them from

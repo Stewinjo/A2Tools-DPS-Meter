@@ -176,8 +176,9 @@ mod tests {
         assert!(decode_base64("Zg=").is_none());
     }
 
-    /// The same agent `download_icon` uses. A 302 must come back as an error,
-    /// not as a second request to the Location.
+    /// The same agent `download_icon` uses. With `redirects(0)`, a 302 is the
+    /// response itself (status 302), not a second request to the Location.
+    /// The server accepts only once: a follow would hang or fail the join.
     #[test]
     fn the_icon_agent_does_not_follow_a_redirect() {
         use std::io::{Read, Write};
@@ -192,11 +193,13 @@ mod tests {
                 b"HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1/nope.png\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
             );
         });
-        let err = icon_agent().get(&format!("http://127.0.0.1:{port}/icon.png")).call();
-        match err {
-            Err(ureq::Error::Status(code, _)) => assert_eq!(code, 302),
-            other => panic!("expected the redirect status, got {other:?}"),
-        }
+        let status = match icon_agent().get(&format!("http://127.0.0.1:{port}/icon.png")).call() {
+            Ok(resp) => resp.status(),
+            Err(ureq::Error::Status(code, _)) => code,
+            other => panic!("expected a 302 response, got {other:?}"),
+        };
+        assert_eq!(status, 302);
+        assert!(!icon_response_ok(status, b""));
         server.join().unwrap();
     }
 }

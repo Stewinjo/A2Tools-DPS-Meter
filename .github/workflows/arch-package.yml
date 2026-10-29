@@ -75,6 +75,7 @@ jobs:
           name: arch-package
           path: packaging/arch/*.pkg.tar.zst
           if-no-files-found: error
+          retention-days: 7
 
   deb-rpm:
     name: .deb and .rpm
@@ -136,6 +137,7 @@ jobs:
             src-tauri/target/release/a2tools-dps-meter
             src-tauri/target/release/a2tools-hotkeys
           if-no-files-found: error
+          retention-days: 7
       # Tauri's .rpm can only grant capture permission from a %post script,
       # which rpm-ostree (Bazzite and the other image-based Fedoras) runs
       # without the privilege to do it. Repackage its files with our spec,
@@ -186,6 +188,7 @@ jobs:
           name: deb-rpm-packages
           path: out/*
           if-no-files-found: error
+          retention-days: 7
 
   install-test:
     name: Install on ${{ matrix.image }}
@@ -255,6 +258,7 @@ jobs:
           name: rpm-repo
           path: repo
           if-no-files-found: error
+          retention-days: 7
 
   # Bazzite publishes its system as a container image. Installing into it is
   # not a reboot into a layered deployment, but it is Bazzite's own rpm-ostree
