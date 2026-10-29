@@ -1,0 +1,194 @@
+name: Pre-release
+
+# Push to develop: build installers once, tag v{version}, publish a GitHub
+# pre-release. Merge to main promotes that same release (see release-promote.yml).
+# Version must be {upstream}-sj.{N}; see docs/GITFLOW.md.
+#
+# Default Cargo features are the private build. Do not pass --features online.
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: prerelease-develop
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: Fork version
+    runs-on: ubuntu-slim
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag: ${{ steps.ver.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+      - id: ver
+        run: |
+          version=$(sh tools/fork-version.sh)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Pre-release version $version"
+
+  windows:
+    name: Windows MSI
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Rust channel from rust-toolchain.toml
+        id: rust-toolchain-file
+        shell: bash
+        run: echo "channel=$(sh tools/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust-toolchain-file.outputs.channel }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: prerelease-windows
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+      - name: Build
+        run: |
+          npm ci
+          npm run tauri build
+          npm run rename-msi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-msi
+          path: src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+          retention-days: 7
+
+  linux:
+    name: Linux deb and rpm
+    needs: version
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Rust channel from rust-toolchain.toml
+        id: rust-toolchain-file
+        shell: bash
+        run: echo "channel=$(sh tools/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust-toolchain-file.outputs.channel }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: prerelease-linux
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+      - name: Build dependencies
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev rpm cpio mold
+          version: 1
+      - name: Link with mold
+        run: |
+          test -x /usr/libexec/mold/ld
+          echo "RUSTFLAGS=-C link-arg=-B/usr/libexec/mold" >> "$GITHUB_ENV"
+      - name: Frontend data
+        run: |
+          mkdir -p public/i18n public/data public/src/data
+          cp -r src/data/i18n/* public/i18n/
+          cp src/data/skill_icons.json src/data/dot_skill_ids.json public/data/
+          cp src/data/skill_icons.json src/data/dot_skill_ids.json public/src/data/
+      - name: Build
+        run: |
+          npm ci
+          cargo build --release --manifest-path src-tauri/Cargo.toml --bin a2tools-hotkeys
+          npx tauri build --bundles deb,rpm
+      - name: Rebuild the .rpm
+        run: |
+          # RPM Version cannot contain '-'; map 2.0.79-sj.1 -> 2.0.79_sj.1 for the spec only.
+          version=${{ needs.version.outputs.version }}
+          rpm_version=$(printf '%s' "$version" | tr '-' '_')
+          mkdir -p rpmpayload
+          (cd rpmpayload && rpm2cpio ../src-tauri/target/release/bundle/rpm/*.rpm | cpio -idm --quiet)
+          (
+            cd rpmpayload
+            find "./usr/lib/A2Tools DPS Meter" -type d | sed 's|^\.||; s|.*|%dir "&"|'
+            find . \( -type f -o -type l \) | sed 's|^\.||' | while IFS= read -r f; do
+              if [ "$f" = /usr/bin/a2tools-dps-meter ]; then
+                printf '%%caps(cap_net_raw=ep) "%s"\n' "$f"
+              else
+                printf '"%s"\n' "$f"
+              fi
+            done
+          ) > rpm-files.txt
+          rpmbuild -bb packaging/linux/a2-tools-dps-meter.spec \
+            --define "_topdir $PWD/rpmbuild" \
+            --define "pkgversion $rpm_version" \
+            --define "payload $PWD/rpmpayload" \
+            --define "filelist $PWD/rpm-files.txt"
+      - name: Name the packages
+        run: |
+          version=${{ needs.version.outputs.version }}
+          mkdir -p out
+          cp src-tauri/target/release/bundle/deb/*.deb "out/a2tools-dps-meter_${version}_amd64.deb"
+          cp rpmbuild/RPMS/x86_64/*.rpm "out/a2tools-dps-meter-${version}-1.x86_64.rpm"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-packages
+          path: out/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish pre-release
+    needs: [version, windows, linux]
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-msi
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: linux-packages
+          path: dist
+      - name: Tag and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -eu
+          ls -la dist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Point the version tag at this commit (replace if we rebuilt the same -sj.N).
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$TAG"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+            gh release edit "$TAG" \
+              --title "$TAG" \
+              --prerelease \
+              --draft=false \
+              --notes "Pre-release from \`develop\` (\`${GITHUB_SHA:0:7}\`). Promote by merging to \`main\` (no rebuild). See docs/GITFLOW.md."
+          else
+            gh release create "$TAG" dist/* \
+              --title "$TAG" \
+              --prerelease \
+              --notes "Pre-release from \`develop\` (\`${GITHUB_SHA:0:7}\`). Promote by merging to \`main\` (no rebuild). See docs/GITFLOW.md."
+          fi

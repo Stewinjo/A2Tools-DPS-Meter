@@ -1,16 +1,11 @@
 name: Packages
 
-# Windows MSI only. Linux .deb / .rpm / Arch stay in arch-package.yml so a
-# release tag does not build the same Linux packages twice.
+# Manual Windows MSI rebuild. Day-to-day pre-releases come from
+# release-prerelease.yml on develop; promotion is release-promote.yml on main.
+# See docs/GITFLOW.md.
 #
-# A version tag or a manual run. The Linux dev container cannot produce the
-# MSI: WiX only runs on Windows.
-#
-# Default Cargo features are the private build (desktop, not online).
-# Do not pass --features online.
+# Default Cargo features are the private build. Do not pass --features online.
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
 
 env:

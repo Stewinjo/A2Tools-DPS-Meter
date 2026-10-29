@@ -1,0 +1,66 @@
+name: Promote release
+
+# Push to main (after merging develop): flip the matching pre-release to a
+# full release. Same tag, same assets, no rebuild. See docs/GITFLOW.md.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: promote-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    name: Promote pre-release
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+      - name: Promote
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          version=$(sh tools/fork-version.sh)
+          tag="v$version"
+
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::$tag has no GitHub release. Build it on develop first."
+            exit 1
+          fi
+
+          is_pre=$(gh release view "$tag" --json isPrerelease -q .isPrerelease)
+          if [ "$is_pre" != "true" ]; then
+            echo "$tag is already a full release; nothing to promote."
+            exit 0
+          fi
+
+          # Tag must exist and its tree must match main (FF, merge commit that
+          # keeps the tip, or a squash with the same tree).
+          if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::missing tag $tag"
+            exit 1
+          fi
+          tag_tree=$(git rev-parse "$tag^{tree}")
+          head_tree=$(git rev-parse "$GITHUB_SHA^{tree}")
+          if [ "$tag_tree" != "$head_tree" ]; then
+            if git merge-base --is-ancestor "$tag" "$GITHUB_SHA"; then
+              echo "::warning::$tag is an ancestor of main but trees differ (merge commit). Promoting the tested assets from $tag anyway."
+            else
+              echo "::error::$tag (tree $tag_tree) does not match main (tree $head_tree). Merge the develop commit that built this pre-release."
+              exit 1
+            fi
+          fi
+
+          gh release edit "$tag" --prerelease=false --latest \
+            --notes "Release $tag (promoted from the develop pre-release; same installers, no rebuild). See docs/GITFLOW.md."
+          echo "Promoted $tag to a full release."

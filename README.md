@@ -88,6 +88,10 @@ The MSI installer will be at `src-tauri/target/release/bundle/msi/`.
 npm run tauri dev
 ```
 
+### GitFlow and releases
+
+`develop` is the integration branch; `main` is what we ship. Version numbers on this fork are `{upstream}-sj.{N}` (for example `2.0.79-sj.1`) so they never collide with upstream tags. A push to `develop` builds installers and publishes a GitHub **pre-release**; merging that work to `main` **promotes** the same pre-release (same tag, same files, no rebuild). Details: [docs/GITFLOW.md](docs/GITFLOW.md).
+
 ### Dev container
 
 Open this folder in a [dev container](https://containers.dev/) (VS Code or Cursor: “Reopen in Container”). The image is Ubuntu 22.04 with Node, Rust, and the WebKitGTK libraries the Linux build needs. The first open installs npm packages and the pre-commit hooks, which run the frontend tests and the platform-boundary check on every commit.
@@ -99,7 +103,7 @@ npm run tauri dev
 npm run tauri build
 ```
 
-That produces a Linux x86_64 binary. The same container is the Linux builder on a Windows, macOS, or Linux machine. It cannot produce the Windows MSI: that build needs the Windows SDK and WiX, so GitHub Actions builds it on `windows-latest` (`.github/workflows/package.yml`, on a version tag or by hand). Linux packages stay in `.github/workflows/arch-package.yml`. macOS is not a target.
+That produces a Linux x86_64 binary. The same container is the Linux builder on a Windows, macOS, or Linux machine. It cannot produce the Windows MSI: that build needs the Windows SDK and WiX. Day-to-day installers come from the develop pre-release workflow; manual rebuilds are `package.yml` (MSI) and `arch-package.yml` (full Linux matrix). macOS is not a target.
 
 ### Private build
 
