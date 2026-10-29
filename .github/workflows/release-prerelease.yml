@@ -80,6 +80,11 @@ jobs:
         with:
           node-version-file: ".nvmrc"
           cache: npm
+      # WiX only accepts numeric pre-release/build ids. Keep tag v*-sj.N; stamp
+      # major.minor.patch.N into bundle.windows.wix.version for the MSI only.
+      - name: WiX-safe MSI version
+        shell: bash
+        run: sh tools/stamp-wix-version.sh "${{ needs.version.outputs.version }}"
       - name: Build
         run: |
           npm ci
