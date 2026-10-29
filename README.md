@@ -91,7 +91,7 @@ npm run tauri dev
 
 ### GitFlow and releases
 
-`develop` is the integration branch; `main` is what we ship. Version numbers on this fork are `{upstream}-sj.{N}` (for example `2.0.86-sj.1`) so they never collide with upstream tags. A push to `develop` builds installers and publishes a GitHub **pre-release**; merging that work to `main` **promotes** the same pre-release (same tag, same files, no rebuild). Details: [docs/GITFLOW.md](docs/GITFLOW.md).
+`develop` is the integration branch; `main` is what we ship. Version numbers on this fork are `{upstream}-sj.{N}` (for example `2.0.86-sj.1`) so they never collide with upstream tags. A push to `develop` that touches app/build paths builds installers and publishes a GitHub **pre-release**; merging that work to `main` **promotes** the same pre-release (same tag, same files, no rebuild). CI runs on pull requests and skips jobs whose inputs did not change. Details: [docs/GITFLOW.md](docs/GITFLOW.md).
 
 ### Dev container
 

@@ -4,10 +4,30 @@ name: Pre-release
 # pre-release. Merge to main promotes that same release (see release-promote.yml).
 # Version must be {upstream}-sj.{N}; see docs/GITFLOW.md.
 #
+# Paths: skip docs-only / unrelated pushes so a README tweak does not burn a
+# Windows + Linux release build. workflow_dispatch always runs.
+#
 # Default Cargo features are the private build. Do not pass --features online.
 on:
   push:
     branches: [develop]
+    paths:
+      - "src-tauri/**"
+      - "public/**"
+      - "src/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - ".nvmrc"
+      - "vite.config.*"
+      - "rust-toolchain.toml"
+      - "packaging/**"
+      - "tools/fork-version.sh"
+      - "tools/rust-channel.sh"
+      - "tools/linux-build-deps.txt"
+      - "tools/install-linux-build-deps.sh"
+      - "tools/linux-build-deps-packages.sh"
+      - ".github/workflows/release-prerelease.yml"
   workflow_dispatch:
 
 concurrency:

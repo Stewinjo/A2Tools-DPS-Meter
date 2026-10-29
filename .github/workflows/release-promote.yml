@@ -2,9 +2,18 @@ name: Promote release
 
 # Push to main (after merging develop): flip the matching pre-release to a
 # full release. Same tag, same assets, no rebuild. See docs/GITFLOW.md.
+#
+# Paths: a docs-only push to main should not attempt promote. workflow_dispatch
+# always runs.
 on:
   push:
     branches: [main]
+    paths:
+      - "package.json"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/tauri.conf.json"
+      - "tools/fork-version.sh"
+      - ".github/workflows/release-promote.yml"
   workflow_dispatch:
 
 concurrency:

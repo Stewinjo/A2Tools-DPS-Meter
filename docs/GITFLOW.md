@@ -30,12 +30,14 @@ Bump `-sj.N` when you want a new build identity. Syncing a newer upstream base r
 ## Pre-release (push to `develop`)
 
 1. Version files must already be `{base}-sj.{N}`.
-2. CI builds the private Windows MSI and the Linux `.deb` / `.rpm`.
+2. A push that changes app/build paths (see `release-prerelease.yml` `paths:`) builds the private Windows MSI and the Linux `.deb` / `.rpm`. Docs-only pushes do not.
 3. It moves (or creates) the tag `v{version}` onto that commit and publishes a **pre-release** with those assets.
 
-The same `-sj.N` pushed again replaces that pre-release (new commit, same version string). That is for iterating on `develop` before promoting.
+The same `-sj.N` pushed again replaces that pre-release (new commit, same version string). That is for iterating on `develop` before promoting. Run the workflow by hand (`workflow_dispatch`) if you need a rebuild without a path change.
 
 Arch / install-matrix packaging stays in `arch-package.yml` and is **manual** (`workflow_dispatch`), so every `develop` push does not pay for that matrix.
+
+CI (`ci.yml`) runs on **pull requests** (and the merge queue), not again on every push to `develop`/`main`. Each CI job is skipped when its inputs did not change (frontend vs Rust vs platform-boundary).
 
 ## Release (merge to `main`) — no rebuild
 
