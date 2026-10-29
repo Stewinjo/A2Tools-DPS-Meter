@@ -4,20 +4,49 @@ This document is written to be checkable. Everything in the "today" section can
 be verified against the source in this repository, and the evidence for the
 claims about packet captures is a test you can run yourself.
 
-Status (meter 2.0.80): **a fight is uploaded when you press Upload on it, or
-when a boss fight ends if you chose to share automatically** (signed in, or
-anonymously without an account). Besides fights, the meter sends a few small
-things on its own: what is in Settings → Privacy (party presence, field boss and
-supply data) and the checks for updates. Each is listed below, with what it
-contains and how to turn it off. This document says what the meter sends, what
-it keeps, and what an upload contains.
+Status: **the build this fork ships sends nothing it collected.** `npm run tauri build`
+and `npm run build:offline` are the same private build. Cargo's default features
+are `desktop` without `online`, so the account client (`reqwest`), the Discord
+client, and the updater are not in the binary. `tools/check-offline-deps.sh`
+fails CI if they show up.
 
----
+## The private build
 
-## What the meter sends
+**Skill and buff images.** The one download. The meter requests a single file
+under `https://assets.playnccdn.com/static-aion2-gamedata/resources/`. It does
+not follow a redirect. It stores the body in `icon_cache/` only when the bytes
+are a PNG, JPEG, GIF, or WebP and at most 1 MiB (`src-tauri/src/icons.rs`).
+The window's content security policy does not list that host on `img-src` or
+`connect-src`, so the page cannot fetch it itself.
 
-Everything the meter sends goes to a2tools.app or its CDN, cdn.a2tools.app, over
-HTTPS. Like any web request, each one shows the server your IP address.
+**Links you click.** Discord, GitHub, Ko-fi, and the other support links open
+in your browser. The host has to be on `BROWSER_HOSTS` in
+`src-tauri/src/open_urls.rs`, the scheme has to be https, and the URL cannot
+carry a username or a port. `file:` and any other scheme are refused. The
+upload preview may open the `share-preview` folder on this computer. That is
+a local directory, not an upload, and a file inside it is not opened.
+
+Nothing else leaves. No version check, no supporter roster, no plugin
+download, no Npcap installer, no fight upload, no boss-timer or party-presence
+report, no Discord activity, no stream overlay. On Windows, install Npcap
+yourself.
+
+`npm install` and the Rust build still download compilers and libraries. That
+is the build, not the running meter.
+
+## `npm run build:online`
+
+Not a release build. It compiles the upstream `online` feature as well. Even
+then, field boss timers, Supply Requests, and party presence are **off until
+you set them to `"true"`** (`dpsMeter.shareData`, `dpsMeter.partyPresence`).
+Fight upload stays off until you turn it on. A version check, the supporter
+roster, and the plugin catalog run only in this build. The rest of this
+section describes what an upload contains when you use that build and choose
+to upload.
+
+Everything the meter sends in an online build goes to a2tools.app or its CDN,
+cdn.a2tools.app, over HTTPS. Like any web request, each one shows the server
+your IP address.
 
 **Version checks.** At start and every six hours the meter fetches
 `https://cdn.a2tools.app/latest-v2.json` and its signature,
@@ -63,24 +92,25 @@ Training dummies are never uploaded. Turning automatic uploads off stops them
 immediately; it does not remove logs already uploaded, which you manage from
 your account.
 
-**Party presence.** *Settings → Privacy → Show A2Tools users in my party*, on
-unless you turn it off (asked once). While you are in a party, the meter sends a
-hash of your character's name and server, and of each party member's, so that
-members who also use A2Tools see a small A2 tag beside each other's names: on
-each party change and every 10 minutes (`src-tauri/src/party_presence.rs`).
+**Party presence.** *Settings → Privacy → Show A2Tools users in my party*, off
+until you set it to `"true"` on this fork. While you are in a party, the meter
+sends a hash of your character's name and server, and of each party member's, so
+that members who also use A2Tools see a small A2 tag beside each other's names:
+on each party change and every 10 minutes (`src-tauri/src/party_presence.rs`).
 Solo, it sends nothing. **A hash of a name is not anonymous:** anyone who knows a
 name and a server can compute it, so the site can tell who plays with whom among
 A2Tools users, and party members using A2Tools learn that you use a meter.
 
 **Field boss and supply data.** *Settings → Privacy → Sync useful data to
-A2Tools*, on unless you turn it off. To keep A2Tools' boss timers and Supply
-Request boards current for everyone, the meter reports game state it sees on
-your server: the field bosses on a map you open, the ones you see killed and
-their health (every few seconds while one is being fought), who holds the Abyss
-artifacts, the Abyss's Dimensional Cores (up, killed, their health, and which side
-killed them), and the Supply Request boards after each reset
-(`src-tauri/src/boss_report.rs`, `src-tauri/src/supply_report.rs`). **Nothing
-about your character** is in these reports.
+A2Tools*, off until `dpsMeter.shareData` is `"true"` on this fork. To keep
+A2Tools' boss timers and Supply Request boards current for everyone, the meter
+reports game state it sees on your server: the field bosses on a map you open,
+the ones you see killed and their health (every few seconds while one is being
+fought), who holds the Abyss artifacts, the Abyss's Dimensional Cores (up,
+killed, their health, and which side killed them), and the Supply Request boards
+after each reset (`src-tauri/src/boss_report.rs`,
+`src-tauri/src/supply_report.rs`). **Nothing about your character** is in these
+reports.
 
 **Logs for the developer, when you send them.** *Settings → Advanced → Send Logs
 to Dev* sends your debug log and your most recent packet logs (see below),
@@ -166,6 +196,9 @@ them by format, not merely by policy.
 ---
 
 ## What an upload contains
+
+This section is `npm run build:online` only. The private build has no upload
+command.
 
 Pressing Upload sends two things to a2tools.app: the fight's Evidence Slice, and
 the names to show on the log. **It sends no numbers.** The service runs this
@@ -260,8 +293,9 @@ is for the meter to ask a server "is this player a supporter?", and it would mea
 sending us a list of who you play with, every fight, in exchange for a colour.
 
 So it works the other way round: a small file listing supporters is published to
-the CDN, your meter downloads it every few hours, and the matching happens
-locally. Nothing about your party is transmitted, and it works offline.
+the CDN, and an online build downloads it every few hours and matches it
+locally. Nothing about your party is transmitted. The private build does not
+download the file. A local `patrons-local.bin` still works, in either build.
 
 The entries in that file are hashed. That is anti-scraping, not secrecy — the
 salt travels with the file, so anyone can test a name they already have. What it

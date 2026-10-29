@@ -1,11 +1,18 @@
 name: CI
 
+# PRs and the merge queue only. Pushes to develop/main are covered by the PR
+# that landed (and by release-prerelease / release-promote). Re-running the full
+# matrix on every branch push doubled Windows + Linux minutes.
 on:
-  push:
-    branches: [main]
   pull_request:
+  merge_group:
   # By hand, for a branch: gh workflow run ci.yml --ref <branch>
   workflow_dispatch:
+
+# One CI run per ref. A new push cancels the previous run for that PR or branch.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,45 +20,108 @@ env:
 # Read-only: CI builds and tests (security audit M13).
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  # Skip expensive jobs when the PR only touches docs, workflows they do not
+  # use, etc. workflow_dispatch and merge_group always run everything.
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-slim
+    outputs:
+      frontend: ${{ steps.select.outputs.frontend }}
+      rust: ${{ steps.select.outputs.rust }}
+      platform: ${{ steps.select.outputs.platform }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dorny/paths-filter@f3360c560367c9daf72b88c0e6164162034c5721 # v3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            frontend:
+              - 'package.json'
+              - 'package-lock.json'
+              - '.nvmrc'
+              - 'vite.config.*'
+              - 'index.html'
+              - 'public/**'
+              - 'src/**'
+              - 'tests/**'
+            rust:
+              - 'src-tauri/**'
+              - 'rust-toolchain.toml'
+              - 'tools/rust-channel.sh'
+              - 'tools/check-offline-deps.sh'
+              - 'tools/linux-build-deps.txt'
+              - 'tools/install-linux-build-deps.sh'
+              - 'tools/linux-build-deps-packages.sh'
+              - '.github/workflows/ci.yml'
+            platform:
+              - 'src-tauri/src/**'
+              - 'tools/check-platform-boundary.sh'
+              - '.github/workflows/ci.yml'
+      - id: select
+        shell: bash
+        run: |
+          set -eu
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            echo "platform=true" >> "$GITHUB_OUTPUT"
+            echo "Running all CI jobs (${{ github.event_name }})"
+            exit 0
+          fi
+          echo "frontend=${{ steps.filter.outputs.frontend }}" >> "$GITHUB_OUTPUT"
+          echo "rust=${{ steps.filter.outputs.rust }}" >> "$GITHUB_OUTPUT"
+          echo "platform=${{ steps.filter.outputs.platform }}" >> "$GITHUB_OUTPUT"
+
   frontend:
     name: Frontend build and tests
-    runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: "24"
+          node-version-file: ".nvmrc"
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: node --test tests/*.test.mjs
+      - run: npm test
 
   desktop:
     name: Desktop build and tests
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Rust channel from rust-toolchain.toml
+        id: rust-toolchain-file
+        shell: bash
+        run: echo "channel=$(sh tools/rust-channel.sh)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
-          toolchain: stable
+          toolchain: ${{ steps.rust-toolchain-file.outputs.channel }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: src-tauri
+          shared-key: desktop-windows
       - name: Test
         working-directory: src-tauri
         # The replay tests skip without A2_REPLAY_CAPTURE, which is a real packet
         # capture and not something to commit — it is a recording of five real
         # people playing. They run locally; everything else runs here.
-        run: cargo test --all-targets
-      - name: Build binaries
-        working-directory: src-tauri
-        run: cargo build --bins
+        # Private build on Windows (win32). Online is compiled on the Linux job.
+        run: cargo test --all-targets --no-default-features --features desktop
 
   platform-boundary:
     name: OS code stays in src/platform
-    runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.platform == 'true'
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # Windows and (later) Linux builds share one codebase. What keeps them from
@@ -61,34 +131,44 @@ jobs:
       # else is how the muddle starts, so it fails here. Put it behind a
       # platform:: function instead, with a twin in every OS folder.
       - name: No OS-specific code outside src/platform
-        run: |
-          leaks=$(grep -rnE --include='*.rs' \
-            'cfg\((not\()?(windows|unix|target_os|target_family)|windows::|std::os::windows' \
-            src-tauri/src | grep -v '^src-tauri/src/platform/' || true)
-          if [ -n "$leaks" ]; then
-            echo "OS-specific code outside src-tauri/src/platform/:"
-            echo "$leaks"
-            exit 1
-          fi
+        run: sh tools/check-platform-boundary.sh
 
   desktop-linux:
     name: Desktop builds and tests on Linux
-    runs-on: ubuntu-24.04
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    # Ubuntu 22.04 matches the dev container and the Linux package builders.
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Rust channel from rust-toolchain.toml
+        id: rust-toolchain-file
+        shell: bash
+        run: echo "channel=$(sh tools/rust-channel.sh)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
-          toolchain: stable
+          toolchain: ${{ steps.rust-toolchain-file.outputs.channel }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: src-tauri
-      # Tauri's Linux build dependencies (WebKitGTK and friends).
+          shared-key: desktop-linux
+      # Same package set as .devcontainer/Dockerfile and the Linux package jobs.
+      # Apt build packages are cached between runs (same helper as packaging).
+      # gnome-keyring is installed separately: its postinst is a poor cache fit.
+      - name: Shared apt package list
+        id: linux-deps
+        run: echo "packages=$(sh tools/linux-build-deps-packages.sh)" >> "$GITHUB_OUTPUT"
       - name: System libraries
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1
+        with:
+          packages: ${{ steps.linux-deps.outputs.packages }}
+          version: 2
+      - name: Keyring packages
+        run: sudo apt-get install -y --no-install-recommends gnome-keyring dbus-daemon
+      - name: Link with mold
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev \
-            libssl-dev libayatana-appindicator3-dev librsvg2-dev \
-            gnome-keyring dbus-daemon
+          test -x /usr/libexec/mold/ld
+          echo "RUSTFLAGS=-C link-arg=-B/usr/libexec/mold" >> "$GITHUB_ENV"
       # Builds platform/linux/ and keeps it in step with platform/win32/ (same
       # functions, same signatures).
       - name: Test
@@ -106,19 +186,31 @@ jobs:
             printf "ci" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
             cargo test --no-default-features --features desktop --lib secret -- --nocapture
           '
+      - name: Online code still compiles
+        working-directory: src-tauri
+        run: cargo check --all-targets --features online
+      - name: Private build links no upload stack
+        run: sh tools/check-offline-deps.sh
 
   parser-wasm:
     name: Parser compiles to wasm32
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Rust channel from rust-toolchain.toml
+        id: rust-toolchain-file
+        shell: bash
+        run: echo "channel=$(sh tools/rust-channel.sh)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
-          toolchain: stable
+          toolchain: ${{ steps.rust-toolchain-file.outputs.channel }}
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: src-tauri
+          shared-key: parser-wasm
       # This is not a nice-to-have. The log service re-derives an uploaded fight
       # by running this parser compiled to wasm32, rather than trusting the
       # numbers a client sent — that is what makes it safe for the client to be
@@ -128,6 +220,36 @@ jobs:
       - name: Check parser core
         working-directory: src-tauri
         run: cargo check --lib --no-default-features --target wasm32-unknown-unknown
+
+  # Single required check for branch protection: skipped jobs must not block merge.
+  ci-result:
+    name: CI
+    if: always()
+    needs:
+      - changes
+      - frontend
+      - desktop
+      - platform-boundary
+      - desktop-linux
+      - parser-wasm
+    runs-on: ubuntu-slim
+    steps:
+      - name: Check job results
+        shell: bash
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          FRONTEND: ${{ needs.frontend.result }}
+          DESKTOP: ${{ needs.desktop.result }}
+          PLATFORM: ${{ needs.platform-boundary.result }}
+          LINUX: ${{ needs.desktop-linux.result }}
+          WASM: ${{ needs.parser-wasm.result }}
+        run: |
+          set -eu
+          ok() { case "$1" in success|skipped) return 0 ;; *) return 1 ;; esac; }
+          echo "changes=$CHANGES frontend=$FRONTEND desktop=$DESKTOP platform=$PLATFORM linux=$LINUX wasm=$WASM"
+          for r in "$CHANGES" "$FRONTEND" "$DESKTOP" "$PLATFORM" "$LINUX" "$WASM"; do
+            ok "$r" || { echo "A required CI job finished as: $r"; exit 1; }
+          done
 
 # No `cargo fmt --check` job. The codebase predates one and is currently about
 # 3,700 diff lines away from rustfmt's opinion; adding the check without doing

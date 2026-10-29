@@ -1,8 +1,7 @@
 name: Linux packages
 
-# Runs on its own when a release tag (v*) is pushed, and by hand (Actions tab,
-# or `gh workflow run arch-package.yml`). Builds the meter's Linux packages and
-# keeps them as downloads:
+# Manual only (`gh workflow run arch-package.yml`). Builds the meter's Linux
+# packages and keeps them as downloads:
 #
 # - the Arch package (packaging/arch/PKGBUILD, makepkg in an Arch container),
 #   for Arch, CachyOS, Manjaro, EndeavourOS;
@@ -18,10 +17,10 @@ name: Linux packages
 # arch-package.yml -f ref=v2.0.36`): the packages are then plain 2.0.36, and go to the CDN with
 # the MSI before the manifest names them (archUrl, debUrl, rpmUrl), which is
 # what Linux meters update from.
+# Manual only. Pre-releases on develop and promotes on main are
+# release-prerelease.yml / release-promote.yml (docs/GITFLOW.md). Running this
+# on every fork tag would rebuild Linux a second time.
 on:
-  # A pushed tag is checked out as itself (inputs.ref is empty then).
-  push:
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
       ref:
@@ -80,6 +79,7 @@ jobs:
           name: arch-package
           path: packaging/arch/*.pkg.tar.zst
           if-no-files-found: error
+          retention-days: 7
 
   deb-rpm:
     name: .deb and .rpm
@@ -88,24 +88,31 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref }}
+      - name: Rust channel from rust-toolchain.toml
+        id: rust-toolchain-file
+        shell: bash
+        run: echo "channel=$(sh tools/rust-channel.sh)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
-          toolchain: stable
+          toolchain: ${{ steps.rust-toolchain-file.outputs.channel }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: src-tauri
           key: deb-rpm
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 20
+          node-version-file: ".nvmrc"
           cache: npm
-      # Cached between runs (it took a minute to download and install every
-      # time); the list is the cache key, so changing it fetches afresh.
+      # Same Ubuntu 22.04 package set as .devcontainer/Dockerfile (tools/linux-build-deps.txt).
+      # Cached between runs; the list is the cache key, so changing it fetches afresh.
+      - name: Shared apt package list
+        id: linux-deps
+        run: echo "packages=$(sh tools/linux-build-deps-packages.sh)" >> "$GITHUB_OUTPUT"
       - name: Build dependencies
         uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1
         with:
-          packages: libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev rpm cpio mold
-          version: 1
+          packages: ${{ steps.linux-deps.outputs.packages }}
+          version: 2
       # mold links far faster than ld, and the meter's link is a large share
       # of an incremental build. GCC 11 (Ubuntu 22.04) has no -fuse-ld=mold;
       # -B points it at mold's `ld` instead, as mold's README says.
@@ -126,6 +133,7 @@ jobs:
           npm ci
           # The hotkeys helper first: tauri.linux.conf.json packs it next to
           # the meter (platform/linux/hotkeys.rs), without capabilities.
+          # Default features are the private build. Do not pass --features online.
           cargo build --release --manifest-path src-tauri/Cargo.toml --bin a2tools-hotkeys
           npx tauri build --bundles deb,rpm
       # The same two binaries for the Arch package (the makepkg job).
@@ -136,6 +144,7 @@ jobs:
             src-tauri/target/release/a2tools-dps-meter
             src-tauri/target/release/a2tools-hotkeys
           if-no-files-found: error
+          retention-days: 7
       # Tauri's .rpm can only grant capture permission from a %post script,
       # which rpm-ostree (Bazzite and the other image-based Fedoras) runs
       # without the privilege to do it. Repackage its files with our spec,
@@ -186,6 +195,7 @@ jobs:
           name: deb-rpm-packages
           path: out/*
           if-no-files-found: error
+          retention-days: 7
 
   install-test:
     name: Install on ${{ matrix.image }}
@@ -255,6 +265,7 @@ jobs:
           name: rpm-repo
           path: repo
           if-no-files-found: error
+          retention-days: 7
 
   # Bazzite publishes its system as a container image. Installing into it is
   # not a reboot into a layered deployment, but it is Bazzite's own rpm-ostree

@@ -1,0 +1,18 @@
+# Cheap checks for every commit inside the dev container. Cargo tests stay on
+# CI: they need the WebKitGTK stack and take longer than a commit hook should.
+# No cargo fmt: the tree is far from rustfmt and a format check would stay red.
+repos:
+  - repo: local
+    hooks:
+      - id: frontend
+        name: frontend build and tests
+        entry: tools/check-frontend.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: platform-boundary
+        name: OS code stays in src/platform
+        entry: tools/check-platform-boundary.sh
+        language: system
+        pass_filenames: false
+        always_run: true

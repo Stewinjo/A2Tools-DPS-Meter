@@ -1,0 +1,17 @@
+# Ubuntu 22.04 packages for building the meter (dev container and CI/package jobs).
+# One package per line. Comments and blank lines are ignored.
+# Keep the Dockerfile and the Linux package workflows on this list.
+libwebkit2gtk-4.1-dev
+build-essential
+curl
+wget
+file
+libxdo-dev
+libssl-dev
+libayatana-appindicator3-dev
+librsvg2-dev
+libpcap-dev
+pkg-config
+rpm
+cpio
+mold

@@ -1,6 +1,6 @@
 [package]
 name = "a2tools-dps-meter"
-version = "2.0.86"
+version = "2.0.86-sj.1"
 description = "A2Tools DPS Meter - AION 2 real-time DPS overlay"
 authors = ["taengu"]
 edition = "2024"
@@ -22,15 +22,16 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 #   cargo check --no-default-features --target wasm32-unknown-unknown
 #
 # is the check that enforces it.
-default = ["desktop", "online"]
+# The private build. `npm run tauri build` and `npm run build:offline` are
+# this. `online` is not included; `npm run build:online` adds it on purpose.
+default = ["desktop"]
 # Everything that talks to a service outside this computer: the A2 Tools
 # account and uploads, the supporter roster, update checks and the updater,
 # Send Logs to Dev, Discord activity, the OBS stream overlay and the Npcap
-# installer download. A build without it (the private build, see README)
-# links none of that code and none of these crates:
-#
-#   npm run build:offline
-#
+# installer download. The private build (the default) links none of that
+# code and none of these crates. `npm run build:online` is the only way to
+# put them back.
+
 online = [
     "desktop",
     "dep:reqwest",
@@ -59,6 +60,10 @@ desktop = [
     "dep:x11-dl",
     "dep:libc",
     "dep:zbus",
+    # Skill icons only: one allowlisted image URL, no redirects. Not the
+    # online feature's reqwest client.
+    "dep:ureq",
+    "dep:url",
 ]
 
 # Both binaries are declared rather than left to auto-discovery, so adding the
@@ -119,6 +124,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = tr
 chrono = { version = "0.4", features = ["serde"] }
 parking_lot = "0.12"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"], optional = true }
+# The private build's icon download. rustls, no redirect following (see icons.rs).
+ureq = { version = "2.12", default-features = false, features = ["tls", "gzip"], optional = true }
+url = { version = "2", optional = true }
 # Live field boss updates pushed by a2tools.app (plugins/boss_live.rs), on the
 # same rustls and web PKI roots as reqwest.
 tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "rustls-tls-webpki-roots"], optional = true }

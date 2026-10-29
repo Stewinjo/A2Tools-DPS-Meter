@@ -332,6 +332,8 @@ Debian, Ubuntu, Mint, Pop!_OS:
 
 ```bash
 sudo apt update
+# Or install the shared list used by the dev container and package CI:
+#   sudo apt install $(grep -vE '^[[:space:]]*(#|$)' tools/linux-build-deps.txt) git
 sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libpcap-dev git
 ```
 

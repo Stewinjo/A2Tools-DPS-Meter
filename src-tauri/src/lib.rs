@@ -54,6 +54,11 @@ pub mod stream_overlay;
 mod npcap_setup;
 
 #[cfg(feature = "desktop")]
+mod icons;
+#[cfg(feature = "desktop")]
+mod open_urls;
+
+#[cfg(feature = "desktop")]
 mod app;
 
 #[cfg(feature = "desktop")]

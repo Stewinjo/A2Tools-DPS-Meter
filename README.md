@@ -89,16 +89,27 @@ The MSI installer will be at `src-tauri/target/release/bundle/msi/`.
 npm run tauri dev
 ```
 
-### Building a private (offline) copy
+### GitFlow and releases
 
-For anyone who wants a meter that talks to nothing but the game: build it yourself without its online features.
+`develop` is the integration branch; `main` is what we ship. Version numbers on this fork are `{upstream}-sj.{N}` (for example `2.0.86-sj.1`) so they never collide with upstream tags. A push to `develop` that touches app/build paths builds installers and publishes a GitHub **pre-release**; merging that work to `main` **promotes** the same pre-release (same tag, same files, no rebuild). CI runs on pull requests and skips jobs whose inputs did not change. Details: [docs/GITFLOW.md](docs/GITFLOW.md).
+
+### Dev container
+
+Open this folder in a [dev container](https://containers.dev/) (VS Code or Cursor: “Reopen in Container”). The image is Ubuntu 22.04 with Node, Rust, and the same apt packages the Linux package workflows install (`tools/linux-build-deps.txt`), including WebKitGTK, libpcap, mold, and the tools for `.deb`/`.rpm`. The first open installs npm packages and the pre-commit hooks, which run the frontend tests and the platform-boundary check on every commit.
+
+Inside the container:
 
 ```bash
-npm install
-npm run build:offline
+npm run tauri dev
+npm run tauri build
+npx tauri build --bundles deb,rpm
 ```
 
-That runs `tauri build -- --no-default-features --features desktop`, which leaves out the Cargo feature `online`. The code below is not switched off in this build, it is not in it: the network client (`reqwest`) and the Discord client are not linked at all, which `cargo tree --no-default-features --features desktop` shows.
+That produces a Linux x86_64 binary (and packages if you ask for them). The same Ubuntu 22.04 baseline and package list are what CI and the develop pre-release Linux job use. It cannot produce the Windows MSI: that build needs the Windows SDK and WiX. Day-to-day installers come from the develop pre-release workflow; manual rebuilds are `package.yml` (MSI) and `arch-package.yml` (full Linux matrix). macOS is not a target.
+
+### Private build
+
+`npm run tauri build` is the private build. `npm run build:offline` is the same command with the feature flags written out: Cargo's default is `desktop` without `online`. The account client (`reqwest`), the Discord client, and the updater are not linked. `tools/check-offline-deps.sh` checks that.
 
 Left out:
 
@@ -108,11 +119,17 @@ Left out:
 - Send Logs to Dev
 - Discord activity ("what I'm playing")
 - the stream overlay for OBS (it serves the meter on your network)
+- boss-timer, supply, and party-presence reports
 - downloading Npcap's installer: install [Npcap](https://npcap.com/#download) yourself first
 
-Settings and History hide what is not there. Everything else works the same, offline: capture, the meter, Details, History, buffs, screenshots, the upload preview (it writes what an upload would contain, to disk only).
+Settings and History hide what is not there. Capture, the meter, Details, History, buffs, screenshots, and the upload preview still work. The preview writes what an upload would contain, to disk only.
 
-Two things still leave the computer, and only these: skill and buff icons, loaded from the game's own CDN (`assets.playnccdn.com`; the window's content security policy allows nothing else), and links you click yourself (Discord, Support), which open in your browser. `npm install` and the Rust build fetch their packages as usual. Run it without building with `npm run dev:offline`.
+What can still cross the network, and only this:
+
+- skill and buff icons, one file at a time from `https://assets.playnccdn.com/static-aion2-gamedata/resources/`. The app does not follow a redirect, and it keeps the response only when the bytes are a PNG, JPEG, GIF, or WebP. The window cannot fetch or display that host itself.
+- links you click (Discord, GitHub, Ko-fi, and the other support links), opened in your browser when the address is https on that list.
+
+`npm run build:online` compiles the upstream online features. It is not the release build. In that build, sharing boss timers and party presence is off until you turn each one on. `npm install` and the Rust build still download their own packages. Run the private build without packaging it with `npm run dev:offline`.
 
 ## FAQ
 
