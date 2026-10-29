@@ -41,8 +41,81 @@ then, field boss timers, Supply Requests, and party presence are **off until
 you set them to `"true"`** (`dpsMeter.shareData`, `dpsMeter.partyPresence`).
 Fight upload stays off until you turn it on. A version check, the supporter
 roster, and the plugin catalog run only in this build. The rest of this
-document describes what an upload contains when you use that build and choose
+section describes what an upload contains when you use that build and choose
 to upload.
+
+Everything the meter sends in an online build goes to a2tools.app or its CDN,
+cdn.a2tools.app, over HTTPS. Like any web request, each one shows the server
+your IP address.
+
+**Version checks.** At start and every six hours the meter fetches
+`https://cdn.a2tools.app/latest-v2.json` and its signature,
+`latest-v2.json.sig` (`src-tauri/src/update_check.rs`). It sends no identifiers,
+no telemetry and no combat data. The meter checks the signature against a key
+it carries and offers only a newer version; if you accept, it downloads that
+package from cdn.a2tools.app and installs it only if its SHA-256 matches the
+manifest.
+
+**The supporter list and the plugin catalog.** Downloaded from the CDN and used
+on your machine (see below). Plugins run sandboxed with no network access; a
+plugin that shows field boss timers gets them through the meter, which fetches
+the server's published timers.
+
+**Your account, if you connect one.** Signing in under *Settings → A2 Tools
+Account* opens a2tools.app in your browser to approve the meter, which then
+holds a token (Windows: encrypted with DPAPI in `credentials.dat`; Linux: in the
+desktop's Secret Service). The meter names itself to the site by system only,
+"A2Tools Meter on Windows", never by your PC's name. Signed in, it uses the token
+to ask who you are, and to upload.
+
+**Sharing boss fights anonymously (no account).** *Settings → Privacy → Share
+boss fights anonymously.* Since 2.0.80 the meter asks before anything is shared:
+a new install offers the choice once, and players who were already sharing see
+a notice once. Nothing is uploaded without an account until then. With it on,
+each boss fight is uploaded once it has ended, under a guest on a2tools.app that
+has no sign-in of its own, and **every name in it is masked, yours too**
+(`Na***a`, `src-tauri/src/share/mod.rs`): your full character name and your PC's
+name are not sent. The fights are public and count on the leaderboards. If you
+later sign in on the same PC, the fights become your account's and the meter
+sends your real name for them so they show under it; fights claimed with a code
+on another PC stay masked. **Stop sharing** (in the notice) turns it off and
+deletes the fights this PC shared from a2tools.app, in the background
+(`account/guest.rs`, `delete_uploads`). Turning it off in Settings only stops new
+uploads.
+
+**Every boss fight, signed in.** *Settings → A2 Tools Account → Upload boss
+fights automatically.* With it on and an account connected, each boss fight is
+uploaded once it has ended (never while it is still being fought), under your
+name, with the visibility you chose on a2tools.app.
+
+Training dummies are never uploaded. Turning automatic uploads off stops them
+immediately; it does not remove logs already uploaded, which you manage from
+your account.
+
+**Party presence.** *Settings → Privacy → Show A2Tools users in my party*, off
+until you set it to `"true"` on this fork. While you are in a party, the meter
+sends a hash of your character's name and server, and of each party member's, so
+that members who also use A2Tools see a small A2 tag beside each other's names:
+on each party change and every 10 minutes (`src-tauri/src/party_presence.rs`).
+Solo, it sends nothing. **A hash of a name is not anonymous:** anyone who knows a
+name and a server can compute it, so the site can tell who plays with whom among
+A2Tools users, and party members using A2Tools learn that you use a meter.
+
+**Field boss and supply data.** *Settings → Privacy → Sync useful data to
+A2Tools*, off until `dpsMeter.shareData` is `"true"` on this fork. To keep
+A2Tools' boss timers and Supply Request boards current for everyone, the meter
+reports game state it sees on your server: the field bosses on a map you open,
+the ones you see killed and their health (every few seconds while one is being
+fought), who holds the Abyss artifacts, the Abyss's Dimensional Cores (up,
+killed, their health, and which side killed them), and the Supply Request boards
+after each reset (`src-tauri/src/boss_report.rs`,
+`src-tauri/src/supply_report.rs`). **Nothing about your character** is in these
+reports.
+
+**Logs for the developer, when you send them.** *Settings → Advanced → Send Logs
+to Dev* sends your debug log and your most recent packet logs (see below),
+listing each file and its size before it asks. Only the developer can open them,
+and they are deleted after 30 days. Nothing else sends them.
 
 ## What it captures locally
 
@@ -104,8 +177,9 @@ over one ordinary five-player dungeon run surfaced, among other things:
 Run that test on your own capture and read the output before you share one with
 anybody, including us.
 
-These files are **never uploaded**, automatically or otherwise: an upload sends a
-slice, not a capture. They grow for as long as the setting is on. Delete them when you are done; the
+These files are **never uploaded with a fight**: an upload sends a slice, not a
+capture. They leave your machine only if you press *Send Logs to Dev*, which
+lists them first. They grow for as long as the setting is on. Delete them when you are done; the
 meter does not need them.
 
 ### The other capture tool
@@ -184,8 +258,9 @@ cannot be worked out from a name or a roster id, and the same name gets a
 different token in every slice. That does not make a person unlinkable across
 uploads: the party roster record in a slice still carries each member's roster
 id, a stable per-character number, beside their token.
-Separately, the upload sends the names the saved fight already holds: **yours
-in full, everyone else masked** the way
+Separately, the upload sends the names the saved fight already holds: signed
+in, **yours in full, everyone else masked**; shared anonymously without an
+account, **everyone masked, you too**; masked the way
 the meter shows them (`Ta****x`: first two characters, last character, at most
 four stars). The service applies that masking again itself, so a modified client
 cannot publish another player's full name. An earlier version of this document
@@ -206,10 +281,10 @@ its link to can open it. Class statistics count every log, public or private,
 as numbers with no names.
 
 **Diagnostic captures are separate, opt-in, and per-incident.** Debugging a parser
-regression sometimes does need the packets an allowlist would strip. That upload
-does not exist yet. When it does it will be its own action, will show you the
-file, its size, its time range, and what it contains before sending, will ask
-every single time, and will never be implied by any other setting.
+regression sometimes does need the packets an allowlist would strip. *Send Logs
+to Dev* is that action: it is its own button, lists the files it will send and
+their sizes, says what packet logs contain, asks every time, and is never implied
+by any other setting. It sends the files as they are, not blinded.
 
 ### Supporter names are resolved on your machine
 
@@ -285,10 +360,13 @@ marketing.
 
 - **A masked name is not anonymous.** `Ta****x` hides most of a name, not all of
   it. Someone who knows who you play with can often tell who it is.
-- **The operator sees more than the public does.** Your log is tied to your
-  account, your own name is on it in full, and the stored slice holds your
-  party's roster ids. None of that is published, but it is not hidden from the
-  service.
+- **The operator sees more than the public does.** Signed in, your log is tied
+  to your account and your own name is on it in full. Every upload, signed in or
+  not, comes from an IP address, and the stored slice holds your party's roster
+  ids. None of that is published, but it is not hidden from the service.
+- **Party presence links people.** The hashes it sends can be matched to any
+  name the site already knows, so the site can see who plays together among
+  A2Tools users. Turn it off in Settings → Privacy if that matters to you.
 - **The slice is derived, not audited line by line.** The allowlist and the name
   checks are tests of what we know to look for. The lifted damage spans carry a
   bounded number of bytes we cannot name.

@@ -6,18 +6,38 @@
       "total": "DMG",
       "ariaDps": "显示 DPS",
       "ariaDamage": "显示总伤害",
-      "both": "两者",
-      "ariaBoth": "显示 DPS 和总伤害",
       "hps": "HPS",
       "totalHeal": "HEAL",
       "stagger": "破防",
       "ariaHps": "显示每秒治疗量",
       "ariaHeal": "显示总治疗量",
-      "ariaStagger": "显示对首领破防条造成的削减"
+      "ariaStagger": "显示对首领破防条造成的削减",
+      "names": {
+        "dps": "每秒伤害",
+        "totalDamage": "总伤害",
+        "hps": "每秒治疗",
+        "totalHeal": "总治疗",
+        "stagger": "破防",
+        "bossStagger": "首领破防 %",
+        "statColours": "数值配色",
+        "deaths": "死亡次数"
+      },
+      "sortBy": "按此排序",
+      "menuTip": "选择各行显示的项目。滚轮或右键：下一个项目",
+      "bossStaggerTip": "在首领的 HP 条上显示破防量表已削减多少",
+      "sortCol": "排序",
+      "showCol": "显示",
+      "statColoursTip": "每项数值在行、菜单和按钮上以各自的颜色显示"
     },
     "updates": {
       "meter": "A2Tools DPS Meter {version} 可更新",
       "plugins": "插件更新：{list}"
+    },
+    "targetMode": {
+      "lastHitByMe": "最后攻击的敌人",
+      "bossTargets": "仅首领",
+      "trainTargets": "训练木桩",
+      "allTargets": "所有敌人合计"
     }
   },
   "details": {
@@ -229,7 +249,12 @@
     },
     "hpsChart": "每秒治疗",
     "sectionChart": "图表",
-    "showSections": "显示的部分"
+    "showSections": "显示的部分",
+    "hoverTooltip": {
+      "loading": "加载中...",
+      "empty": "此战斗没有技能数据",
+      "error": "无法加载技能"
+    }
   },
   "history": {
     "title": "战斗历史",
@@ -248,6 +273,13 @@
     "viewDungeon": "按副本分组",
     "viewGrouped": "按首领分组",
     "fightCount": "{n} 场",
+    "best": "最快 {time}",
+    "top": "最高 {damage}",
+    "showAll": "显示全部 {n} 场",
+    "showFewer": "收起",
+    "expandAll": "全部展开",
+    "collapseAll": "全部收起",
+    "training": "训练",
     "fightCountOne": "1 场",
     "previewUpload": "预览上传内容",
     "previewUploadTip": "把分享这场战斗时会上传的内容写成文件。不会发送。",
@@ -307,8 +339,6 @@
     "showOdyle": "显示奥德能量",
     "odyleEnergy": "奥德能量",
     "showTtk": "显示预计击杀时间",
-    "showHealModes": "在 DPS/DMG 按钮中显示治疗",
-    "showStaggerMode": "在 DPS/DMG 按钮中显示破防",
     "showTotalDps": "显示队伍总计",
     "roundDps": "DPS 以千为单位显示 (13k)",
     "showDpsSuffix": "DPS 后显示 /s",
@@ -553,7 +583,9 @@
       "confirm": "要将你的调试日志和最近的数据包日志发送给 A2 Tools 开发者吗？\n\n调试日志记录了计量器的运行情况。数据包日志是开启数据包记录期间录下的原始游戏流量。两者都可能包含角色名。只有开发者能打开它们，30 天后会被删除。",
       "sending": "发送中...",
       "sent": "已发送。你的反馈代码是 {code}，请在 Discord 上告诉开发者。",
-      "failed": "无法发送：{error}"
+      "failed": "无法发送：{error}",
+      "files": "将发送以下文件：",
+      "contents": "数据包日志可能包含聊天内容和其他玩家的名字。"
     },
     "barGap": {
       "label": "条形间距"
@@ -570,8 +602,6 @@
       "autoHideMeter": "其他窗口位于游戏前方时计量器会隐藏，回到游戏后再出现。",
       "detailsMonitor": "在所选显示器上打开详情窗口并保持在那里。",
       "showTtk": "在战斗计时器旁显示整场首领战的预计时长。",
-      "showHealModes": "计量器上的 DPS/DMG 按钮也会切换到每秒治疗量和总治疗量。",
-      "showStaggerMode": "计量器上的 DPS/DMG 按钮也会显示每位玩家削减首领破防条的数值。",
       "showTotalDps": "在各行下方显示队伍总 DPS 和总伤害的条。",
       "roundDps": "13,412 显示为 13k。",
       "showSuspendBtn": "在计量器上显示一个按钮，按下后停止读取游戏流量，再按一次恢复。",
@@ -598,7 +628,9 @@
       "hideWhenSolo": "不在队伍中时隐藏计量器，加入队伍后再次显示。显示/隐藏快捷键仍可随时打开它。",
       "hideOutOfCombat": "脱离战斗达到该时长后隐藏计量器，下一次命中时再次显示。设置、历史记录或详情窗口打开时，或鼠标停在计量器上时不会隐藏。",
       "runAsAdmin": "显示游戏帧率需要此项。每次启动计量器时 Windows 都会询问。",
-      "shareData": "将你所在服务器的野外首领计时和补给委托分享给 a2tools.app，让大家的 A2Tools 保持同步：你地图上的首领、你看到被击杀的首领及其血量，以及每次重置后的委托板。不会发送任何关于你角色的信息。"
+      "shareData": "将你所在服务器的野外首领计时和补给委托分享给 a2tools.app，让大家的 A2Tools 保持同步：你地图上的首领、你看到被击杀的首领及其血量，以及每次重置后的委托板。不会发送任何关于你角色的信息。",
+      "pluginAutoUpdate": "计量器启动时，插件更新会在后台自动安装。要求新权限的更新仍会等待你的同意。",
+      "meterAnchor": "行增减时保持不动的计量器边缘。"
     },
     "globalHotkeys": "使用快捷键",
     "hotkeyConsent": {
@@ -656,7 +688,7 @@
       "permNone": "除显示窗口外不做其他事",
       "enabled": "启用",
       "enabledTip": "开启：随计量器启动。关闭：保持安装，但不运行。",
-      "showMeter": "显示 DPS 统计",
+      "showMeter": "显示统计",
       "hideClosed": "AION2 关闭时隐藏",
       "hideUnfocused": "AION2 不在前台时隐藏",
       "inDock": "放入插件停靠栏（关闭：单独窗口）",
@@ -664,8 +696,12 @@
       "noMatch": "没有匹配的插件。",
       "permsTitle": "可以:",
       "permFps": "显示游戏帧率（在 Windows 上，计量器会为此请求以管理员身份运行）",
+      "permDeathRecap": "被玩家击杀后：对方是谁，以及对你造成的伤害",
+      "permScreenshot": "截取自身窗口的截图，到剪贴板和你的截图文件夹",
       "testHint": "任何人都可以试用的早期版本，和其他插件一样经过签名。它们可能会变化或还不完善：发现问题请告诉我们。",
-      "testTitle": "测试插件"
+      "testTitle": "测试插件",
+      "autoUpdate": "自动更新插件",
+      "whatsNew": "{version} 的新内容"
     },
     "clearOnZone": {
       "label": "清空统计",
@@ -678,7 +714,15 @@
     "runAsAdmin": "以管理员身份运行",
     "runAsAdminTitle": "A2Tools - 以管理员身份运行",
     "runAsAdminAsk": "显示游戏帧率需要计量器以管理员身份运行。\n\n现在以管理员身份重启计量器吗？每次启动计量器时 Windows 都会询问。你可以在设置中关闭此项。",
-    "shareData": "将有用的数据同步到 A2Tools"
+    "shareData": "将有用的数据同步到 A2Tools",
+    "meterAnchor": {
+      "label": "计量器固定在",
+      "options": {
+        "top": "顶部",
+        "middle": "中间",
+        "bottom": "底部"
+      }
+    }
   },
   "support": {
     "button": "支持我一下",
@@ -723,7 +767,8 @@
     "identifyingPlayer": "#{id}",
     "a2toolsUser": "使用 A2Tools",
     "dpsSuffix": "/秒",
-    "others": "其他"
+    "others": "其他",
+    "deaths": "本场战斗中死亡 {count} 次"
   },
   "skills": {
     "fallback": "技能 {code}",
@@ -834,5 +879,55 @@
     "settings": "计量器设置",
     "opacity": "背景不透明度",
     "failed": "此插件无法启动：{error}"
+  },
+  "sharing": {
+    "title": "帮忙建立排行榜吗？",
+    "sub": "选一项开始。随时可在 设置 → 隐私 中更改。",
+    "shareTitle": "匿名分享战斗",
+    "recommended": "推荐",
+    "shareText": "你的首领战会加入 a2tools.app 的公开记录，所有名字都会隐藏。无需账号。",
+    "noTitle": "不分享",
+    "noText": "你的战斗信息不会离开这台电脑。",
+    "signInBefore": "想用自己的名字上传战斗？",
+    "signIn": "登录 A2 Tools",
+    "signInAfter": "之前分享的战斗会转入你的账号。",
+    "previewTitle": "分享的战斗在 a2tools.app 上的样子",
+    "never": "绝不会发送电脑名称和角色的完整名字。",
+    "policy": "隐私政策",
+    "continue": "继续"
+  },
+  "sharingNotice": {
+    "title": "你的战斗正在帮忙建立排行榜",
+    "text": "你完成的首领战会分享到 a2tools.app，所有名字都会隐藏，包括你的（例如 Na***a）。无需账号，随时可在 设置 → 隐私 中停止。",
+    "stop": "停止分享",
+    "details": "详情",
+    "keep": "继续分享",
+    "stopped": "已停止分享。之前分享的战斗正在从 a2tools.app 删除。"
+  },
+  "privacy": {
+    "title": "隐私",
+    "intro": "本计量器与 a2tools.app 分享的内容。每一项都由你决定。",
+    "share": "匿名分享首领战",
+    "shareHint": "首领战结束后会加入 a2tools.app 的公开记录和排行榜。所有名字都会隐藏，包括你的。无需账号。",
+    "signedIn": "已登录：首领战会上传到你的 A2 Tools 账号（见 A2 Tools 账号）。",
+    "never": "绝不发送：聊天、电脑名称、角色的完整名字。“发送日志给开发者”（高级）只在你按下时才发送。",
+    "policy": "完整隐私政策"
+  },
+  "changelog": {
+    "title": "新功能",
+    "intro": "最近的版本，最新的在前。",
+    "allReleases": "在 GitHub 查看所有版本",
+    "installed": "已安装",
+    "available": "有可用更新",
+    "loading": "正在加载更新说明…",
+    "none": "尚无更新说明。",
+    "failed": "无法加载更新说明。也可以在下方的 GitHub 查看。"
+  },
+  "footerMenu": {
+    "tip": "选择底栏显示的项目",
+    "ttk": "预计击杀时间",
+    "partyTotal": "队伍总计",
+    "odyle": "奥德能量",
+    "ping": "延迟"
   }
 }

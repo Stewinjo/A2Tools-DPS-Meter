@@ -5,6 +5,7 @@ use std::sync::Arc;
 use parking_lot::{Mutex, RwLock};
 
 use crate::capture::abnormal;
+use crate::combat::death_recap::{self, DeathRecaps};
 use crate::combat::stagger::{End, Outcome, StaggerHit, StaggerLog, StaggerWindow};
 
 use crate::entity::damage_packet::ParsedDamagePacket;
@@ -529,6 +530,9 @@ pub struct DataStorage {
     /// lock, as `abnormals`: fed by its own records, read when a fight is
     /// saved.
     stagger: Mutex<StaggerLog>,
+    /// Who killed you (see `combat::death_recap`). Its own lock, as
+    /// `stagger`.
+    death_recaps: Mutex<DeathRecaps>,
 }
 
 /// The timeline and when it was last pruned.
@@ -892,6 +896,7 @@ impl DataStorage {
             before_reset: RwLock::new(None),
             abnormals: Mutex::new(AbnormalLog { timeline: abnormal::Timeline::default(), pruned_ms: NEVER_MS }),
             stagger: Mutex::new(StaggerLog::default()),
+            death_recaps: Mutex::new(DeathRecaps::default()),
         }
     }
 
@@ -955,6 +960,12 @@ impl DataStorage {
     /// The stagger gauge an entity's spawn carries (its starting value).
     pub fn note_stagger_spawn(&self, entity: i32, max: u32, rest: u32) {
         self.stagger.lock().note_spawn(entity, max, rest);
+    }
+
+    /// How far `entity`'s stagger gauge is worn down, 0-100, if it has one.
+    pub fn stagger_pct(&self, entity: i32) -> Option<f64> {
+        let (max, rest) = self.stagger.lock().gauge(entity)?;
+        (max > 0).then(|| f64::from(max.saturating_sub(rest)) * 100.0 / f64::from(max))
     }
 
     /// A gauge update (`05 E0 .. 03 01`), at the current time.
@@ -1354,7 +1365,9 @@ impl DataStorage {
 
     /// `name`'s home server, as a self or loot record states it.
     pub fn note_player_server(&self, name: &str, server_id: u16) {
-        if !(1000..3000).contains(&server_id) {
+        // Only a server that exists: a misread one stuck to a player and went
+        // out with their boss reports (2258 for ten days, 2026-10-27).
+        if !crate::capture::servers::exists(server_id) {
             return;
         }
         let mut inner = self.inner.write();
@@ -1369,10 +1382,36 @@ impl DataStorage {
         self.inner.read().player_servers.get(name.trim()).copied().unwrap_or(0)
     }
 
+    /// The server to file `name` under in a saved fight, as the game's
+    /// records state it. You: your self record's, the game's word on where you
+    /// are, and Some(0), unknown, when none has come this session, never a
+    /// guess (#128). Anyone else: what a self or loot record stated, None when
+    /// nothing has, for the caller's roster value. Both come before the
+    /// roster's, the top bits of an id a character moved to another server
+    /// keeps, so it names the old one.
+    pub fn stated_server(&self, name: &str) -> Option<u16> {
+        let name = name.trim();
+        let inner = self.inner.read();
+        if inner.local_character_name.as_deref().map(str::trim) == Some(name) {
+            return Some(inner.self_server);
+        }
+        inner.player_servers.get(name).copied()
+    }
+
+    /// The server a saved fight is filed under: your self record's, 0
+    /// (unknown) when none has come this session. Not `fight_server_id`,
+    /// whose fallbacks (your roster entry, the connected host's server, the
+    /// party's majority) guess, and guessed wrong for a moved character or in
+    /// a cross-server dungeon (#128). The game sends the record on every zone
+    /// you enter.
+    pub fn self_record_server(&self) -> u16 {
+        self.inner.read().self_server
+    }
+
     /// Your home server, as your own self record states it; 0 for a record
     /// that states none (a tutorial character), which forgets the last one.
     pub fn note_self_server(&self, server_id: u16) {
-        if server_id == 0 || (1000..3000).contains(&server_id) {
+        if server_id == 0 || crate::capture::servers::exists(server_id) {
             self.inner.write().self_server = server_id;
         }
     }
@@ -1865,6 +1904,17 @@ impl DataStorage {
             purge_friendly_damage(&mut inner, actor_id);
         }
 
+        // Another player's hit on you, for a death recap.
+        if let Some(me) = inner.local_player_id.and_then(|id| i32::try_from(id).ok()) {
+            let attacker = summon_resolver::resolve(actor_id, &inner.summon_storage);
+            if summon_resolver::resolve(target_id, &inner.summon_storage) == me
+                && attacker != me
+                && inner.known_player_ids.contains(&attacker)
+            {
+                self.death_recaps.lock().note_hit(attacker, pdp.timestamp(), pdp.total_damage() as i64, skill_code);
+            }
+        }
+
         // Party healing: player-on-player damage is actually healing/buffs
         if is_friendly_action(&inner, actor_id, target_id) {
             let heal_amount = pdp.total_damage();
@@ -2110,6 +2160,28 @@ impl DataStorage {
         inner.boss_maps.retain(|m| m.map_id != map.map_id);
         inner.boss_maps.push(map);
         inner.boss_map_seq += 1;
+    }
+
+    /// What another player's record says of them, kept for a death recap.
+    pub fn note_player_profile(&self, id: i32, profile: death_recap::Profile) {
+        self.death_recaps.lock().note_profile(id, profile);
+    }
+
+    /// You were killed: the recap, unless this death was already told. It is
+    /// kept only once handed back to `push_death_recap`.
+    pub fn died(&self, killer: death_recap::Killer, at_ms: i64) -> Option<death_recap::DeathRecap> {
+        let party: Vec<String> = self.get_party_members().into_keys().collect();
+        self.death_recaps.lock().died(killer, at_ms, &party)
+    }
+
+    pub fn push_death_recap(&self, recap: death_recap::DeathRecap) {
+        self.death_recaps.lock().push(recap);
+    }
+
+    /// The death recaps made since `seq` was read, and the count to ask with
+    /// next time; None when there are none.
+    pub fn death_recaps_since(&self, seq: u64) -> Option<(u64, Vec<death_recap::DeathRecap>)> {
+        self.death_recaps.lock().since(seq)
     }
 
     /// The maps opened since `seq` was read (all of them, newest last), and
@@ -4466,4 +4538,24 @@ mod tests {
         s.note_party_left();
         assert!(s.take_combat_reset_requested(), "an open-world party: someone else on the meter");
     }
+    #[test]
+    fn a_moved_character_is_filed_under_the_server_its_records_state() {
+        // An Israphel player whose id was made on Nemon (#128).
+        let s = DataStorage::new();
+        s.set_local_identity_from_game(7, Some("Arid".into()));
+        // No self record yet: you are on no known server, not a guessed one.
+        s.note_player_server("Arid", 2109);
+        assert_eq!(s.stated_server("Arid"), Some(0));
+        assert_eq!(s.self_record_server(), 0);
+        s.note_self_server(2101);
+        // A later loot record must not move you back.
+        s.note_player_server("Arid", 2109);
+        assert_eq!(s.stated_server("Arid"), Some(2101));
+        assert_eq!(s.self_record_server(), 2101);
+        // Someone else: what a loot record stated, else nothing (the roster's).
+        s.note_player_server("Other", 1102);
+        assert_eq!(s.stated_server("Other"), Some(1102));
+        assert_eq!(s.stated_server("Nobody"), None);
+    }
+
 }

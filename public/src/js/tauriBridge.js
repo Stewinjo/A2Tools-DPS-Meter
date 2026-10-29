@@ -11,11 +11,17 @@
   // Which optional parts this build has (app.rs build_features). The private
   // build, compiled without online features, has no account, uploads, update
   // check, Send Logs to Dev, Discord activity or stream overlay: html.a2-offline
-  // hides them (styles.css) and the code below skips them.
+  // hides them (styles.css) and the code below skips them. It also says where
+  // Settings offers "Meter stays fixed at", and the edge kept while it is unset.
   window.a2Build = { online: true };
   window.a2BuildReady = invoke("build_features")
     .then((features) => {
-      window.a2Build = { online: features?.online !== false, devSupporter: features?.devSupporter === true };
+      window.a2Build = {
+        online: features?.online !== false,
+        devSupporter: features?.devSupporter === true,
+        meterAnchor: features?.meterAnchor !== false,
+        meterAnchorDefault: features?.meterAnchorDefault,
+      };
       document.documentElement.classList.toggle("a2-offline", !window.a2Build.online);
       return window.a2Build;
     })
@@ -1133,11 +1139,9 @@
     const px = (name) => parseFloat(style[name]) || 0;
     const borderW = style.boxSizing === "border-box" ? 0
       : px("borderLeftWidth") + px("borderRightWidth") + px("paddingLeft") + px("paddingRight");
-    const borderH = style.boxSizing === "border-box" ? 0
-      : px("borderTopWidth") + px("borderBottomWidth") + px("paddingTop") + px("paddingBottom");
-    // Viewport units follow layout immediately, without waiting for resize events.
+    // Viewport units follow layout immediately, without waiting for resize
+    // events. The width only: the meter is as tall as its rows.
     meter.style.width = `max(300px, calc(100vw - ${padding.w + borderW}px))`;
-    meter.style.height = `max(${nativeResize.contentHeight || 30}px, calc(100vh - ${padding.h + borderH}px))`;
   };
 
   const finishNativeResize = (cancel = false) => {
@@ -1169,10 +1173,9 @@
       }
       if (window.A2_VIEW === "main") {
         const meter = document.querySelector(".meter");
-        if (meter?.style.height) {
+        if (meter?.style.width) {
           const style = getComputedStyle(meter);
           meter.style.width = style.width;
-          meter.style.minHeight = style.height;
           meter.style.height = "";
           // Kept across restarts (core.js bindResizeHandle).
           if (!operation.cancel) window.dispatchEvent(new Event("meter-resized"));
@@ -1199,8 +1202,8 @@
         operation.contentHeight = minimum.contentHeight;
         minWidth = minimum.width;
         minHeight = minimum.height;
+        meter.style.minHeight = "";
         followNativeSize();
-        meter.style.minHeight = `${minimum.contentHeight}px`;
       }
     }
     operation.started = invoke("begin_window_resize", {
@@ -1335,6 +1338,7 @@
           ? Math.max(contentH, Math.min(tooltipReserve.h, room.h))
           : contentH;
     const scale = window.devicePixelRatio || 1;
+    const preserveAnchor = !(fullPanel || promoOpen || tooltipReserve);
     const sizeKey = `${w}x${h}@${scale}`;
     if (sizeKey === lastSizeKey) return pendingWindowSize?.promise || Promise.resolve(true);
     lastSizeKey = sizeKey;
@@ -1348,7 +1352,7 @@
       .then(() => {
         // A queued auto-size must not interrupt a resize the player began.
         if (resizeActive) return false;
-        return invoke("resize_window", { width: w, height: h, scale }).then(() => true);
+        return invoke("resize_window", { width: w, height: h, scale, preserveAnchor }).then(() => true);
       })
       .then((applied) => {
         if (!applied && pendingWindowSize === operation) lastSizeKey = "";
@@ -1526,10 +1530,40 @@
   }, 10000);
 
   // ===== Overlay resize handle =====
+  // The window grows to the room right of and below the meter for the drag,
+  // without moving it, and the edge is kept from wherever the player leaves
+  // it (app.rs resize_window).
+  // On Linux, sideways only and as the drag needs it (growResizeViewport):
+  // a Wayland window can't read where it is (screenX/Y are 0), so the room
+  // "right of and below" it was the whole screen, and a window grown to
+  // that made Hyprland move it, where it stayed once it shrank back (#102).
+  // The handle sets the width only, so the height never needs the room.
+  const RESIZE_SLACK = 400;
   const expandViewport = () => {
     resizeActive = true;
+    const scale = window.devicePixelRatio || 1;
+    if (isLinux) {
+      const width = Math.min(window.innerWidth + RESIZE_SLACK, window.screen?.availWidth || 1920);
+      invoke("resize_window", { width, height: window.innerHeight, scale, preserveAnchor: false, playerResize: true }).catch(() => {});
+      return;
+    }
     const space = spaceRightBelow();
-    invoke("resize_window", { width: Math.min(space.w, 2000), height: Math.min(space.h, 1200), scale: window.devicePixelRatio || 1 }).catch(() => {});
+    invoke("resize_window", {
+      width: Math.min(space.w, 2000), height: Math.min(space.h, 1200), scale,
+      preserveAnchor: false, playerResize: true,
+    }).catch(() => {});
+  };
+  // The meter dragged to `width` CSS px: on Linux, the window grows sideways
+  // ahead of it (core.js bindResizeHandle calls this on each move).
+  if (window.javaBridge) window.javaBridge.growResizeViewport = (width) => {
+    if (!isLinux || !resizeActive || nativeResize) return;
+    if (width + 40 <= window.innerWidth) return;
+    const target = Math.min(width + RESIZE_SLACK, window.screen?.availWidth || 1920);
+    if (target <= window.innerWidth) return;
+    invoke("resize_window", {
+      width: target, height: window.innerHeight, scale: window.devicePixelRatio || 1,
+      preserveAnchor: false, playerResize: true,
+    }).catch(() => {});
   };
   const shrinkViewport = () => {
     if (nativeResize) return;
@@ -1550,7 +1584,8 @@
       if (!primaryHeld) return;
       if (supported) {
         const padding = overlayPadding();
-        startNativeResize("SouthEast", 300 + padding.w, 30 + padding.h);
+        // Sideways only: the handle sets the width, the rows the height.
+        startNativeResize("East", 300 + padding.w, 30 + padding.h);
       } else {
         // Replay an early press once backend detection has completed.
         e.target.dispatchEvent(new MouseEvent("mousedown", e));

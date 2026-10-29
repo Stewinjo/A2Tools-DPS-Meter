@@ -25,6 +25,7 @@ The **[AION 2 DPS Meter website, a2tools.app](https://a2tools.app)** has the dow
 - Ten languages: English, Korean, Chinese (Traditional and Simplified), Japanese, German, French, Spanish, Portuguese and Russian
 - Always-on-top transparent overlay
 - Themes and customization
+- Meter anchor setting (Top, Centre, Bottom)
 - Stream overlay for OBS on another PC: add the meter as a Browser Source, and choose the name shown for you
 - Fight uploads to [a2tools.app](https://a2tools.app/logs): a link to share, leaderboards and class stats
 - Windows and Linux ([Linux guide](docs/linux.md))
@@ -90,7 +91,7 @@ npm run tauri dev
 
 ### GitFlow and releases
 
-`develop` is the integration branch; `main` is what we ship. Version numbers on this fork are `{upstream}-sj.{N}` (for example `2.0.79-sj.1`) so they never collide with upstream tags. A push to `develop` builds installers and publishes a GitHub **pre-release**; merging that work to `main` **promotes** the same pre-release (same tag, same files, no rebuild). Details: [docs/GITFLOW.md](docs/GITFLOW.md).
+`develop` is the integration branch; `main` is what we ship. Version numbers on this fork are `{upstream}-sj.{N}` (for example `2.0.86-sj.1`) so they never collide with upstream tags. A push to `develop` builds installers and publishes a GitHub **pre-release**; merging that work to `main` **promotes** the same pre-release (same tag, same files, no rebuild). Details: [docs/GITFLOW.md](docs/GITFLOW.md).
 
 ### Dev container
 

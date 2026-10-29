@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "a2tools-dps-meter"
-version = "2.0.79-sj.1"
+version = "2.0.86-sj.1"
 dependencies = [
  "aho-corasick",
  "chrono",
@@ -33,6 +33,8 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
+ "ureq",
+ "url",
  "urlencoding",
  "webkit2gtk",
  "windows 0.59.0",

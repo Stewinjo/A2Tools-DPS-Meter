@@ -12,7 +12,7 @@ if [ "$cargo_ver" != "$pkg_ver" ] || [ "$cargo_ver" != "$tauri_ver" ]; then
 fi
 
 if ! printf '%s' "$cargo_ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-sj\.[0-9]+$'; then
-  echo "fork version must look like 2.0.79-sj.1 (got $cargo_ver)" >&2
+  echo "fork version must look like 2.0.86-sj.1 (got $cargo_ver)" >&2
   exit 1
 fi
 

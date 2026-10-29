@@ -21,9 +21,9 @@ App version (in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.js
 {upstream-base}-sj.{N}
 ```
 
-Examples: `2.0.79-sj.1`, `2.0.79-sj.2`, then after syncing upstream `2.0.86-sj.1`.
+Examples: `2.0.86-sj.1`, `2.0.86-sj.2`, then after syncing a newer upstream `2.0.87-sj.1`.
 
-Git tag and GitHub Release name: `v` + that string (`v2.0.79-sj.1`).
+Git tag and GitHub Release name: `v` + that string (`v2.0.86-sj.1`).
 
 Bump `-sj.N` when you want a new build identity. Syncing a newer upstream base resets `N` to `1`.
 
