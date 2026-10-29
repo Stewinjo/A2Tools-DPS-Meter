@@ -95,16 +95,17 @@ npm run tauri dev
 
 ### Dev container
 
-Open this folder in a [dev container](https://containers.dev/) (VS Code or Cursor: “Reopen in Container”). The image is Ubuntu 22.04 with Node, Rust, and the WebKitGTK libraries the Linux build needs. The first open installs npm packages and the pre-commit hooks, which run the frontend tests and the platform-boundary check on every commit.
+Open this folder in a [dev container](https://containers.dev/) (VS Code or Cursor: “Reopen in Container”). The image is Ubuntu 22.04 with Node, Rust, and the same apt packages the Linux package workflows install (`tools/linux-build-deps.txt`), including WebKitGTK, libpcap, mold, and the tools for `.deb`/`.rpm`. The first open installs npm packages and the pre-commit hooks, which run the frontend tests and the platform-boundary check on every commit.
 
 Inside the container:
 
 ```bash
 npm run tauri dev
 npm run tauri build
+npx tauri build --bundles deb,rpm
 ```
 
-That produces a Linux x86_64 binary. The same container is the Linux builder on a Windows, macOS, or Linux machine. It cannot produce the Windows MSI: that build needs the Windows SDK and WiX. Day-to-day installers come from the develop pre-release workflow; manual rebuilds are `package.yml` (MSI) and `arch-package.yml` (full Linux matrix). macOS is not a target.
+That produces a Linux x86_64 binary (and packages if you ask for them). The same Ubuntu 22.04 baseline and package list are what CI and the develop pre-release Linux job use. It cannot produce the Windows MSI: that build needs the Windows SDK and WiX. Day-to-day installers come from the develop pre-release workflow; manual rebuilds are `package.yml` (MSI) and `arch-package.yml` (full Linux matrix). macOS is not a target.
 
 ### Private build
 

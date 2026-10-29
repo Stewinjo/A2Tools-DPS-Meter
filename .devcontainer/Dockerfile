@@ -3,26 +3,22 @@ FROM mcr.microsoft.com/devcontainers/base:ubuntu-22.04
 # Ubuntu 22.04 matches the glibc baseline of the Linux packages, so a binary
 # built in this container runs on 22.04 and newer. Node 24 matches .nvmrc.
 # Rust comes from rust-toolchain.toml at the repo root.
+# Apt build packages are the same list the Linux package workflows install:
+# tools/linux-build-deps.txt.
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    PATH="/home/vscode/.cargo/bin:/home/vscode/.local/bin:${PATH}"
+    PATH="/home/vscode/.cargo/bin:/home/vscode/.local/bin:${PATH}" \
+    RUSTFLAGS="-C link-arg=-B/usr/libexec/mold"
+
+COPY tools/linux-build-deps.txt /tmp/linux-build-deps.txt
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libwebkit2gtk-4.1-dev \
-        build-essential \
-        curl \
-        wget \
-        file \
-        libxdo-dev \
-        libssl-dev \
-        libayatana-appindicator3-dev \
-        librsvg2-dev \
-        libpcap-dev \
-        pkg-config \
+        $(grep -vE '^[[:space:]]*(#|$)' /tmp/linux-build-deps.txt) \
         python3-pip \
         python3-venv \
         ca-certificates \
         gnupg \
+    && test -x /usr/libexec/mold/ld \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \

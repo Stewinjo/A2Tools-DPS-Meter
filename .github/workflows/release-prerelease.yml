@@ -93,11 +93,15 @@ jobs:
         with:
           node-version-file: ".nvmrc"
           cache: npm
+      # Same Ubuntu 22.04 package set as .devcontainer/Dockerfile (tools/linux-build-deps.txt).
+      - name: Shared apt package list
+        id: linux-deps
+        run: echo "packages=$(sh tools/linux-build-deps-packages.sh)" >> "$GITHUB_OUTPUT"
       - name: Build dependencies
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
-          packages: libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev rpm cpio mold
-          version: 1
+          packages: ${{ steps.linux-deps.outputs.packages }}
+          version: 2
       - name: Link with mold
         run: |
           test -x /usr/libexec/mold/ld

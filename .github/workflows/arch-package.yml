@@ -103,13 +103,16 @@ jobs:
         with:
           node-version-file: ".nvmrc"
           cache: npm
-      # Cached between runs (it took a minute to download and install every
-      # time); the list is the cache key, so changing it fetches afresh.
+      # Same Ubuntu 22.04 package set as .devcontainer/Dockerfile (tools/linux-build-deps.txt).
+      # Cached between runs; the list is the cache key, so changing it fetches afresh.
+      - name: Shared apt package list
+        id: linux-deps
+        run: echo "packages=$(sh tools/linux-build-deps-packages.sh)" >> "$GITHUB_OUTPUT"
       - name: Build dependencies
         uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1
         with:
-          packages: libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev rpm cpio mold
-          version: 1
+          packages: ${{ steps.linux-deps.outputs.packages }}
+          version: 2
       # mold links far faster than ld, and the meter's link is a large share
       # of an incremental build. GCC 11 (Ubuntu 22.04) has no -fuse-ld=mold;
       # -B points it at mold's `ld` instead, as mold's README says.
