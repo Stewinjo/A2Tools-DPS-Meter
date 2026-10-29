@@ -27,6 +27,8 @@ Git tag and GitHub Release name: `v` + that string (`v2.0.86-sj.1`).
 
 Bump `-sj.N` when you want a new build identity. Syncing a newer upstream base resets `N` to `1`.
 
+**Windows MSI note:** WiX only allows a numeric fourth version field. The Windows jobs stamp `bundle.windows.wix.version` to `{upstream-base}.{N}` (for example `2.0.86.1`) via `tools/stamp-wix-version.sh` before `tauri build`. The GitHub tag stays `v*-sj.N`.
+
 ## Pre-release (push to `develop`)
 
 1. Version files must already be `{base}-sj.{N}`.

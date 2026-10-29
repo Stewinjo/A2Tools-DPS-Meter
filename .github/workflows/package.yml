@@ -32,6 +32,10 @@ jobs:
         with:
           node-version-file: ".nvmrc"
           cache: npm
+      # WiX only accepts numeric pre-release/build ids. See tools/msi-version.sh.
+      - name: WiX-safe MSI version
+        shell: bash
+        run: sh tools/stamp-wix-version.sh
       - name: Build
         run: |
           npm ci
